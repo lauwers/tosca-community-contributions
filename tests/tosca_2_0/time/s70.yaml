@@ -19,7 +19,6 @@ data_types:
     data_type: float
     units:
       bps: 1 # bits per second
-      Bps: 8 # bytes per second
     prefixes: *ISO80000
     validation: { $greater_or_equal: [ $value, 0.0 bps ] }
 
