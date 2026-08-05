@@ -64,12 +64,17 @@ as follows:
    packages.
 4. Finally, the *instance view* models add interface implementations
    based on implementation artifacts that can be used by an
-   Orchestrator to manage the products specifies in the device view
+   Orchestrator to manage the products specified in the device view
    models.
 
-> Add discussion about monitoring and telemetry data moving in the
-  other direction: low-level monitoring data are summarized and
-  aggregated into high-level *system health* attributes.
+> **Open, not yet tracked as an issue.** Add discussion about monitoring
+> and telemetry data moving in the other direction: low-level monitoring
+> data are summarized and aggregated into high-level *system health*
+> attributes. This is the *bottom-up* counterpart to the top-down
+> refinement described above, and the mechanism already exists —
+> `substitution_mappings.attributes` escalates values from a substituting
+> service onto the substituted node. Needs an issue number and a written
+> pattern.
 
 As a *best practice*, TOSCA profile designers should avoid mixing and
 matching types defined at different levels of abstraction within the
@@ -140,7 +145,7 @@ profiles as shown in the following figure:
 Each of these profiles defines derived node types for one of the four
 base node types defined in the base profile. These profiles can then
 be used to define abstract TOSCA service templates that define specific
-applications or services. The following figure shown an example of
+applications or services. The following figure shows an example of
 such an abstract service template:
 
 ![Abstract Service Template](../images/abstract-template.png)
@@ -174,7 +179,7 @@ shown in the following figure:
 
 #### Translating System View to Administrator View
 
-We recommend using *substitution mapping* to tranlate from the system
+We recommend using *substitution mapping* to translate from the system
 view level of abstraction to the administrator view level of
 abstraction, as shown in the following figure:
 
@@ -215,7 +220,9 @@ the types defined in device view profiles without having to introduce
 new derived types. Unfortunately, the TOSCA language currently does
 not have any constructs to support such dynamic behavior.
 
-> This needs further discussion
+> **Tracked as issue I14** (dynamic attachment of implementation
+> artifacts). Needs a language construct; open against a future spec
+> version.
 
 ### Mapping Relationship Types and Capability Types
 
@@ -263,6 +270,86 @@ are shared by profiles at different levels of abstraction.
 > question tracked as issue I22 and written up in
 > [profile-naming.md](profile-naming.md).
 
+### Two Dimensions Determine Where a Type Belongs
+
+The level of abstraction is not the only thing that decides which
+profile a node type belongs in. Profile organization is governed by two
+*independent* dimensions, and a type must be located in both before a
+home can be chosen for it.
+
+Both dimensions are already present in the figure above. The first is
+the *model continuum*, which runs vertically: the figure labels System
+View profiles *technology and vendor independent*, Administrator View
+profiles *technology specific*, and Device View profiles *vendor
+specific*. The second runs horizontally, and appears in the figure as
+the decomposition of the System View level into separate Platform,
+Application, Data, and Network profiles. The section on [decoupling
+applications and data from platforms](#decouple-applications-and-data-from-platforms)
+below applies that same separation to the design of abstract service
+templates.
+
+What the figure does not yet show is the two dimensions *crossed below
+the System View level*. Its Administrator View row contains IaaS,
+Kubernetes, and Docker profiles, and its Device View row contains AWS,
+OpenStack, and Proxmox profiles — all of them platform profiles. The
+application, data, and network columns have no Administrator View or
+Device View counterparts in the figure, yet the reasoning that
+justifies them at the System View level applies unchanged further down:
+a certificate authority is a technology-specific concept in the same
+way a Kubernetes cluster is, and a particular certificate authority
+implementation is vendor-specific in the same way AWS is.
+
+Taken together, the two dimensions therefore produce four categories
+rather than one column of three:
+
+|                        | **Platform**                                              | **Application**                        |
+| ---------------------- | --------------------------------------------------------- | -------------------------------------- |
+| **Administrator View** | a Kubernetes cluster; a container runtime; an OCI registry | a certificate authority; an image registry |
+| **Device View**        | k3s, k0s, minikube, kubeadm; containerd, Docker Engine     | step-ca; zot; Harbor                   |
+
+A type that appears to belong in two of these categories at once is not
+a single type. A node type *named* for a technology-neutral role while
+its properties describe one specific product spans the Administrator
+and Device rows simultaneously, and no profile can hold it correctly.
+The remedy is to rename the type for the product it actually models, or
+to separate it into two types, rather than to select a compromise
+profile for it.
+
+In practice the Administrator View cell of the application column is
+frequently filled by a *capability type* rather than by a node type.
+Where consumers bind a port rather than a node — see the [Component/Port
+Pattern](#componentport-pattern) below — the technology-neutral concept
+is already expressed by the capability that the port advertises, and the
+node type only ever needs to be the Device View realization, named for
+its product.
+
+This is what makes an intermediate abstract node type unnecessary, and
+the alternative is not merely redundant but unbuildable. Suppose the
+technology-neutral concept were modeled as a node type at the
+Administrator View row. A Device View product type would then reach it
+by *derivation*, following the recommendation in [Translating
+Administrator View to Device
+View](#translating-administrator-view-to-device-view) above. But that
+same product type must also derive from the type that represents how it
+is realized. That is one `derived_from` and two required parents, and
+TOSCA node types are singly inherited. Expressing the neutral concept as
+a capability avoids the contradiction entirely, because a port is
+*bound* rather than *inherited*, and binding carries no such limit.
+
+This is a specific instance of a more general tension already noted in
+[Translating Device View to Instance
+View](#translating-device-view-to-instance-view) above: where derivation
+is the only mechanism available for crossing a boundary, every
+independent axis of variation has to be expressed as another derived
+type. Capabilities relieve that pressure wherever what the consumer
+needs is a contract rather than an ancestor.
+
+> The profile organization figure above depicts the horizontal dimension
+> only at the System View level. Extending it to show application (and
+> data, and network) profiles at the Administrator View and Device View
+> levels would make the four categories described here visible in the
+> figure itself.
+
 ## Deploying Abstract Services
 
 This section describes the process that could be implemented by TOSCA
@@ -272,6 +359,8 @@ the following steps:
 1. Decouple applications and data from platforms.
 2. Make placement decisions based on available platforms.
 3. Placement decisions drive substitution.
+4. Resolve the placement edge through the substitution, recursively where
+   the allocated platform is itself abstract.
 
 ### Decouple Applications and Data from Platforms
 
@@ -316,7 +405,7 @@ specific customer.
 ### Make Placement Decisions
 
 When deploying an abstract service, the TOSCA Processor first makes
-placement decision by *fulfilling* the dangling `host` requirements of
+placement decisions by *fulfilling* the dangling `host` requirements of
 the nodes in the abstract service representation using capabilities of
 the nodes in the abstract platform representations. Node filters can
 be used to narrow down the set of candidate target platforms. The
@@ -325,17 +414,145 @@ following figure shows a node filter that drives placement for the
 
 ![Placement Decisions](../images/placement.png)
 
+The capability named by the requirement determines which platforms are
+*eligible*; the node filter then chooses among them. In practice a
+placement filter usually compares **properties** of the candidate — its
+location, its capacity, what it is designated to be — rather than
+matching further capability types, because eligibility has already been
+settled by the capability. In the abstract service template this looks
+as follows:
+
+```yaml
+node_templates:
+  application:
+    type: <abstract application node type>
+    properties:
+      <where this application may run>: [...]
+    requirements:
+      # Left dangling: no target node is named. The processor fulfils it
+      # at deployment time against the available platform representations.
+      - host:
+          node_filter:
+            $has_entry:
+              - {$get_property: [SELF, SOURCE, <where this application may run>]}
+              - {$get_property: [SELF, TARGET, <where this platform is>]}
+```
+
+**A node filter may be declared in two places, and both are applied.** A
+requirement *definition* in a node type may carry a `node_filter`, and a
+requirement *assignment* in a template may carry another. A processor
+evaluates both, so a template can narrow the placement its type permits
+but can never relax it. Profile designers should treat a filter written
+into a type as permanent for every consumer of that type, and prefer to
+leave placement policy to the templates unless the constraint is truly
+intrinsic to the type.
+
+#### Filters and Missing Values
+
+Platform representations are rarely populated uniformly — one platform
+may publish its capacity while another does not — so filters must
+tolerate absent values. TOSCA's comparison functions are *three-valued*
+for this reason: an operand that has no value evaluates to null, a
+comparison with a null operand returns null rather than false, and `$and`
+skips null operands rather than failing on them.
+
+The practical effect is that a filter listing several constraints
+degrades gracefully: it constrains on exactly the fields both sides
+populate, and the remaining constraints begin to apply, with no change to
+the filter, as platform representations grow richer. This is what makes
+it safe to write a thorough placement filter against representations that
+are only partly filled in.
+
+**Note the asymmetry between the two kinds of filter**, which is easy to
+be caught by:
+
+| | Filter evaluates to null |
+|---|---|
+| **Node filter** (placement) | the candidate **passes** — the constraint is skipped |
+| **Substitution filter** (realization) | the template **does not match** |
+
+Placement is permissive about what it does not know; realization
+selection is not. A substituting template whose filter reads a property
+the abstract node does not populate will simply never be selected.
+
 ### Placement Drives Substitution
 
 Once placement decisions have been made, the TOSCA Processor finds
 substituting templates that are suitable for the allocated target
-platform. This is done by using information about that target platform
-into the *substitution filters* for the candidate substituting
+platform. This is done by feeding information about that target
+platform into the *substitution filters* of the candidate substituting
 templates.
 
-> If substitution decisions made based on the type of the allocated
-  platform, do we need to define a TOSCA function that returns a node
-  type?
+Because placement has already been made, the filter can reach the
+allocated platform through the requirement that was just fulfilled. A
+substitution filter is evaluated against the node being substituted, so
+it uses a TOSCA Path that traverses that relationship to its target:
+
+```yaml
+substitution_mappings:
+  node_type: <abstract application node type>
+  substitution_filter:
+    $equal:
+      - {$get_property: [SELF, RELATIONSHIP, host, 0, TARGET, <property naming the platform>]}
+      - <the value this substituting template claims>
+```
+
+This is what keeps the abstract service template free of technology. The
+template says only what the application needs and where it may run, and
+the *realization* asks what it was placed on. No property has to be added
+to the application to record which technology should deploy it: that
+choice belongs to the platform, and the application reaches it across the
+`host` requirement.
+
+**Do we need a function that returns a node type?** Filtering on a
+*property* of the allocated platform is sufficient, and is preferable to
+filtering on its type:
+
+- Platforms of **different types** — a Kubernetes cluster versus a Docker
+  engine, as in the examples below — can be distinguished either way,
+  since a type that is distinct can also expose a property saying what it
+  is.
+- Platforms of the **same type** cannot be distinguished by type at all.
+  This case is common: a fleet of like devices differing only in what each
+  is designated to become is one node type carrying different property
+  values, and a type-returning function would find them identical.
+
+A property filter covers both cases and a type filter covers only one,
+which argues against introducing the function. It does place a
+requirement on the platform representation: it must carry a property that
+*distinguishes* the platform, which the [platform representation
+list](#decouple-applications-and-data-from-platforms) above does not yet
+call out. Location, capabilities, capacity and access describe what a
+platform *is and can do*; selecting a realization additionally needs to
+know what it is *designated to be*.
+
+> **Proposed resolution for issue I13** (`type-of-node` / "hash type"
+> function). Recommends *not* adding the function, on the grounds that
+> property-based selection is strictly more general. Consistent with the
+> direction already recorded for I4 (abstract-types vs. minimal-types),
+> which leans toward property-based substitution.
+
+**Filters must be mutually exclusive.** A processor selects the *first*
+candidate whose substitution filter matches, and raises an error when
+none does. Neither outcome is negotiable by the template author, so the
+author of a set of substituting templates for the same abstract node type
+is responsible for ensuring that at most one filter can match any given
+node. Selecting on the allocated platform makes this straightforward:
+each realization claims a different platform designation, so exclusivity
+follows from the filters rather than having to be maintained separately.
+
+**The allocated platform may itself be abstract.** A platform
+representation can be a node that is substituted in turn, in which case
+the `host` requirement of the substituting service's inner node cannot be
+resolved against it directly. The processor resolves this recursively: it
+maps the requirement onto the substituted node's relationship, and where
+that target is itself abstract, drills into *that* node's substituting
+service, reads its `substitution_mappings.capabilities` for the named
+capability, and recurses on the inner node the mapping names. The edge
+therefore crosses both substitution boundaries and resolves against the concrete
+node. Nothing extra need be declared for this beyond the two mappings each
+side already provides: a capability mapping on the platform side, and a
+requirement mapping on the application side.
 
 #### Substitute for Kubernetes
 
@@ -359,7 +576,7 @@ engine:
 ![Placement on Docker Engine](../images/placement-docker.png)
 
 In this scenario, the abstract application node is substituted using
-templates that implement this nodeq by deploying the application
+templates that implement this node by deploying the application
 directly using Docker. TOSCA type definitions from the TOSCA Docker
 Profile are used for the templates in the substituting service:
 
@@ -389,6 +606,58 @@ Intent-revealing names (`Monitors`, `ManagedBy`, `RegistersWith`,
 `HostedOn`) are preferred over mechanism-flavored names (`ConnectsTo`,
 `BindsTo`, `LinksTo`). This keeps service templates readable: the reader
 should understand *why* two nodes are related from the type name alone.
+
+**Data placement.** A port is not only the structural touch point between
+two components; it is where a component's *exposed contract* lives. The
+properties and attributes a *consumer* reads across a binding — the
+coordinates it needs to use the exposed functionality — belong on the
+**capability**, not on the node. State that is internal to how the
+component is realized or deployed stays on the node.
+
+Decide by asking: *does a bound consumer read this value?* If a node bound
+through a requirement reads it (through the capability), it is part of the
+exposed contract and belongs on the capability; if only the component's own
+operations use it, it is realization detail and stays on the node.
+
+This is what lets the Component/Port pattern support substitution. A
+consumer that reads the contract from the capability (using the TOSCA Path
+`CAPABILITY` step, e.g. `[SELF, RELATIONSHIP, <requirement>, CAPABILITY,
+<attribute>]`) depends on the *capability type*, not on the node type behind
+it. Any node that advertises the capability — a different realization, or a
+substituting service template — then satisfies the consumer unchanged. Put
+the contract on the port and the implementation behind it becomes swappable;
+leave it on the node and every consumer is coupled to that node type.
+
+For example, a certificate authority exposes its issuing endpoint, trust
+root, and enrolment credential on a *certification* capability rather than
+on the (deployment-specific) CA node, so an enrolling node works against any
+CA realization; an OCI registry exposes its endpoint, scheme, TLS trust
+anchor, and deposit credential on its *registry* capability, so a publisher
+pushes without knowing whether the registry is zot, Harbor, or a hosted
+service.
+
+When a base capability has several realizations, a second question follows:
+*which* capability carries a given value? Decide by whether it is universal or
+realization-specific. A contract **every** realization exposes belongs on the
+**base capability**; a value **specific to one** realization belongs on a
+**capability derived from** that base — so realizations differ without the base
+accumulating every realization's fields. This is the same derive-to-specialize
+discipline the pattern applies to type *naming*, now applied to the contract's
+*data*: enrich the base for what is common, derive a capability for what is not.
+
+**Secrets are references, not values.** Related to data placement, but
+broader: a component's model — its properties and attributes, and the inputs
+and outputs that flow through them — must carry *references* to secret
+material, never the material itself. A password, token, or private key belongs
+in a vault or a mounted file on the executing host; the model carries only a
+**path or name** the runtime resolves there. A secret placed in a property, an
+attribute, or an inputs file leaks: inputs are often committed to source
+control, and attributes surface in deployed-model state where any consumer can
+read them back. Where a secret's *value* originates is a separate choice — an
+operator may supply it out of band (a reference to an existing vault entry),
+or, when the orchestrator controls both ends of a channel, an operation may
+generate it directly into a vault and hand back only the path. Either way the
+model sees a reference; the value never becomes a modeled value.
 
 The Component/Port pattern defines *common* categories of
 functionality that are typically exposed by all components. It then
@@ -439,21 +708,36 @@ categories of functionality are shown in the following picture:
   > pattern that was discussed in the TOSCA TC but never written down.
 
 - **Security**: securing access to a node is not one concern but
-  several, each modeled with its own capability/relationship pair:
+  several, each modeled with its own capability/relationship pair. Note in
+  particular that *authentication* (proving **who** a consumer is) and
+  *authorization* (**what** that consumer may do) are distinct concerns and
+  should not be conflated, even though a bearer credential often fuses them:
   - *Perimeter protection* — a node exposes a capability indicating it
     can be fronted by a security control (firewall, gateway); the
-    protected node declares a requirement targeting it.
-  - *Credentials / authorization* — a node exposes a capability
-    representing credentials it can be accessed with; consumers declare
-    an authorization requirement against it.
+    protected node declares a requirement targeting it. (A coarse,
+    network-layer authorization boundary.)
+  - *Authentication / credentials* — a node exposes a capability
+    representing the credential(s) by which a consumer **proves its
+    identity** to access it; the consumer declares a requirement that it
+    is authenticated using that credential. This establishes *who* the
+    consumer is, not *what* it may do.
+  - *Authorization* — what an authenticated principal is **permitted to
+    do**. A credential proves identity; authorization is the policy
+    applied to that identity. Today this is usually *coarse* — holding a
+    bearer credential grants access, and perimeter controls gate at the
+    network layer — so it rides on the credential and perimeter patterns.
+    *Fine-grained* authorization (roles / scoped permissions modeled as
+    their own capabilities and requirements, so that "identity X may do A
+    but not B" is expressible) is a further, less-developed sub-pattern.
   - *Identity / registration / trust* — a node (a registry or trust
     store) exposes a registration capability; devices and services
     declare a *registration requirement* (e.g. `RegistersWith`) so that
     their signed requests can later be verified by relying parties.
 
   > **Proposed resolution for issue I17.** Replaces "this pattern needs
-  > further work" by splitting security into perimeter, credentials, and
-  > identity/trust sub-patterns.
+  > further work" by splitting security into perimeter, authentication,
+  > authorization, and identity/trust sub-patterns — keeping authentication
+  > and authorization distinct rather than fused under "credentials."
 
 **The category list is open-ended.** The categories above are the
 *common* ones, not an exhaustive set. Other recurring cross-cutting
