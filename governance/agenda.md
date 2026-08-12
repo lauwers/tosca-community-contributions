@@ -1,150 +1,173 @@
-# TOSCA Community — Proposed Agenda (2026-08-05)
+# TOSCA Community — Proposed Agenda (2026-08-12)
 
-**Status:** Draft agenda for 2026-08-05, following 2026-07-22 (no meeting 2026-07-29)
-**Related documents:** [README](../profiles/community/tosca/README.md) · [prior-art](../profiles/community/tosca/docs/prior-art.md) · [design-guide](../profiles/community/tosca/docs/design-guide.md) · [profile-naming](../profiles/community/tosca/docs/profile-naming.md) · [kubernetes-modeling](../profiles/community/tosca/docs/kubernetes-modeling.md) · [open-issues](open-issues.md)
+**Status:** Draft agenda for 2026-08-12, following 2026-08-05
+**Related documents:** [README](../profiles/community/tosca/README.md) · [design-guide](../profiles/community/tosca/docs/design-guide.md) · [profile-naming](../profiles/community/tosca/docs/profile-naming.md) · [kubernetes-modeling](../profiles/community/tosca/docs/kubernetes-modeling.md) · [open-issues](open-issues.md) · [decision-log](decision-log.md)
 
-Two weeks since the last meeting, so there is more to cover than usual. Items 1–5
-carry the decisions; items 6–9 are marked *if time permits*. Issue references point
-to [open-issues.md](open-issues.md).
-
----
-
-## 1. Action-item review — 10 min
-
-From 2026-07-22:
-
-- **Core data types** (Roberto, *D9*) — ✅ email, FQDN and HTTP URL types merged into
-  `core` (PR #354). This cleared the `0.1` gate, which has now been open for two
-  weeks (see #4).
-- **Kubernetes consolidation** (Chris, *K6 / I21 / I22*) — ✅ **complete**. A single
-  Kubernetes resource profile, `io.kubernetes:1.35`; the duplicate under
-  `technology/` removed (~12,500 lines); `technology/README.md` now states plainly
-  that there is no Kubernetes profile there and points at
-  `profiles/io/kubernetes/1.35`. Confirm K6 closed.
-- **Abstract-profile platform properties** (Chris, *N8*) — **awaiting the credential
-  resolution (#3).** The connection properties (management address, credential file,
-  config/access file) are still absent from the `abstract.*` types. One of the three
-  *is* a credential, so its shape depends on what #3 settles — adding it now would
-  mean adding it twice. Sequence N8 behind #3 rather than re-committing to a date for
-  it here.
-- **Tal's OpenAPI→TOSCA generator** (Roberto) — a submission location was to be
-  suggested. Is the PR in, and when do we walk it (see #8)?
-- **Kubernetes profile testing** (Prachi, Jay) — feedback was due after their return
-  from leave; nothing has reached the repository. Status? (see #5)
-
-## 2. `implementation-details` as YAML — 10 min · **decide before #4**
-
-A change the community has not yet reviewed: `implementation-details` is now encoded
-as **YAML rather than JSON**, with new `decode_yaml` / `validate_yaml` functions in
-`core` and a stated parser dependency.
-
-This reverses a convention the group adopted earlier, and it touches **both profiles
-that make up the `0.1` release**. Ratify it, amend it, or hold it back — but decide
-before cutting the tag, so the release does not ship a convention change the
-community has not reviewed.
-
-## 3. Credential model — 10 min · *discussion #281* · **decision sought**
-
-A full design of record for credentials has been written up and is ready to bring
-back to #281. It adopts the discussion's synthesis — a minimal data type plus
-technology-specific typed nodes — and extends it to the **capability** (the same shape
-on the port) and to **multiplicity**.
-
-The substantive refinement concerns the discussion's later revision, which moved from
-a map to a **list of `{name, type, file}` entries** to admit same-kind duplicates. The
-proposal is to keep the **map keyed by kind**, on a language constraint rather than a
-preference:
-
-- A TOSCA path indexes a **map by key** and a **list by integer position**, and there
-  is no predicate form. Against a list of typed entries, *"the entry whose `type` is
-  `ssh`"* is **not expressible in `$get_property` at all** — retrieval would need a
-  custom function or a positional convention, either of which puts the kind→entry
-  mapping somewhere the model cannot see.
-- With a map, the entry needs no `type` field, because **the key is the type**.
-- Same-kind multiplicity is rare inline and belongs at node cardinality; the list
-  survives only as the map's *value* (`map<kind, list<Credential>>`) for the narrow
-  case where one node must hold same-kind duplicates.
-- The `kind` vocabulary is constrained with `key_schema` + `$valid_values`.
-
-**Decision sought:** take this refinement back to #281 as the proposed resolution.
-
-## 4. Cut the `0.1` release — 15 min · *R1 / R3 / R4 / R5 / I8*
-
-- Scope is unchanged: `core` + the five `abstract.*` profiles; technology profiles
-  held (R5).
-- The D9 gate cleared on 07-22 (PR #354) and the repository still carries **no
-  tags**. Nothing is blocking this except #2.
-- Push `v0.1` → the workflow builds and signs, opens a draft → review and publish.
-- N8 (#1) waits on the credential resolution (#3), so `0.1` ships without it. Confirm
-  that, and whether the platform connection properties then warrant a `0.1.1`.
-
-## 5. Kubernetes profile testing feedback — 5 min
-
-First feedback from **Prachi and Jay** on `io.kubernetes:1.35` — gaps and fixes needed
-before broader use.
+Item 1 is a specification question raised on the `implementation-details` discussion
+that bears directly on a decision taken on 08-05; it is taken first, while the group
+is fresh and the decision is still open. Item 2 is a **live demonstration** of
+substitution-driven realization against a real device estate, and it shows in
+working form much of what item 1 discusses. Issue references point to
+[open-issues.md](open-issues.md).
 
 ---
 
-## 6. Design-guide walkthrough — *if time permits*
+## 1. Must every substituting-template input be mapped? — 15 min · *raised by Roberto* · **decision sought**
 
-Seven commits between 07-27 and 08-04:
+Roberto has reopened the `implementation-details` discussion
+([#258](https://github.com/oasis-open/tosca-community-contributions/discussions/258))
+with a specification question; the reasoning below is posted there in full, so the
+meeting can start from a written position rather than from cold. §15.2 says only:
 
-- **Component/Port**: the *Data placement* principle — which capability carries a
-  value; and *Secrets are references, not values*.
-- **Security** split into perimeter / authn / authz / identity, keeping
-  authentication and authorization distinct.
-- **Profile organization has two dimensions** — the model continuum crossed with
-  platform-versus-application, and the placement rule that follows. Both dimensions
-  are already in the guide; what is new is crossing them below the System View level.
-  Notes that `profile-organization.png` needs extending to show the application, data
-  and network columns at the lower two levels.
-- **Placement mechanics** — the capability determines which platforms are eligible and
-  the node filter chooses among them; a filter may be declared on both the requirement
-  definition and the assignment, and both apply, so a template can narrow what its
-  type permits but never relax it.
-- **Filters and missing values** — TOSCA's three-valued comparison semantics, and an
-  asymmetry worth knowing: a **node filter** that evaluates to null lets the candidate
-  **pass**, while a **substitution filter** that evaluates to null means the template
-  **does not match**. Placement is permissive about what it does not know; realization
-  selection is not.
-- **A proposed resolution for `type-of-node`** (*I13*) — recommend not adding a
-  type-returning function. Platforms of the same type that differ only in what each is
-  designated to become cannot be distinguished by type at all, and that case is common,
-  so a property filter covers strictly more ground than a type filter. Carries a
-  follow-on for the platform-representation list, which describes what a platform *is
-  and can do* but not what it is *for*. Raised here for awareness; not put forward for
-  a decision today.
+> Property mappings must be defined for all non-optional service template inputs that
+> do not define a `default` value.
 
-## 7. Kubernetes application-level modeling — *if time permits*
+That wording is narrower than "every input of a substituting template must be mapped
+from a property of the substituted node." On a plain reading, a substituting template
+may declare **additional inputs that are not mapped at all**, provided they are
+optional or carry a default — which would mean `implementation-details` is not the
+only way for a substituting template to obtain implementation-specific information.
 
-Open design question in
-[`kubernetes-modeling.md`](../profiles/community/tosca/docs/kubernetes-modeling.md):
-where **application-level** (microservice-to-microservice) interaction belongs, given
-the substitution boundary and that requirements are declared on types.
+Roberto's three readings:
 
-## 8. Tal's alternative Kubernetes generation — *if time permits*
+1. **Implementation-specific** — the standard permits unmapped inputs and each
+   orchestrator decides how they resolve (default, prompt, orchestrator API, …).
+   Maximum flexibility, least portability.
+2. **Restrictive** — unmapped inputs are allowed only where the substituting template
+   stays valid with no external intervention; every required input without a default
+   must be mapped. Closest to the literal wording.
+3. **Community best practice** — even where the specification permits unmapped inputs,
+   recommend that all inputs derive from the substituted node's interface, with an
+   opaque property the preferred carrier when implementation-specific information is
+   needed. No normative change; a recommendation.
 
-Review where Tal's automated OpenAPI-to-TOSCA approach belongs in the repository and
-schedule a PR walkthrough. Multiple modeling approaches stay open.
+**The case the three options miss.** An abstract node hides detail — that is what
+makes it abstract. But the substituting service frequently *needs* some of what was
+hidden, and needs it **per substituted node**. An unmapped input with a default cannot
+supply that: a default is fixed when the realization is authored, so it can only ever
+carry a lowest-common-denominator value, never the value *this* node requires. So
+options 1 and 2 do not stand in for `implementation-details` — they cover only inputs
+whose value is genuinely constant across every use of the realization. The moment a
+value varies with the node being substituted, it has to arrive **through** the
+substitution interface, and mapping is the only mechanism that crosses it.
 
-## 9. Open items & AOB — *if time permits*
+That reframes the question. It is not really *may* unmapped inputs exist — on the
+wording, they may. It is **what carries per-instance implementation detail across the
+boundary**, and for that there is no alternative to a mapped property. Chapter 15's own
+framing points the same way: substitution "allows for simplified representations of
+complex systems that *abstract away* technology or vendor-specific implementation
+details" — abstracting a detail away at the top implies a way to reintroduce it at the
+bottom.
 
-- **New issue to open — monitoring and telemetry escalation.** The design guide now
-  notes the *bottom-up* counterpart to top-down refinement: low-level monitoring data
-  summarized and aggregated into high-level system-health attributes. The mechanism
-  already exists — `substitution_mappings.attributes` escalates values from a
-  substituting service onto the substituted node — but it needs an issue number and a
-  written pattern.
-- **OPAS / Margo end-to-end demo** — container-based deployment to edge devices.
-  Offered at 07-22 for "a future meeting"; propose a date.
+This bears directly on **D10** (agreed 08-05), which adopted the YAML-encoded
+`implementation-details` property. D10 survives either way, but its justification
+changes: not "the only legal route" but "the only route that carries a value which
+varies per node."
+
+**Decision sought:** which reading the community adopts, and whether the answer is a
+best-practice note in the design guide, an errata question for the TC, or both. The
+question back to the group — was the possibility of additional unmapped inputs left
+open deliberately, and if so, is the wording of §15.2 clear enough that a reader will
+not mistake a default for a substitute for mapping?
+
+## 2. Demonstration — one abstract topology, two realizations — 30 min
+
+A live run of an integration between a TOSCA orchestrator and **Margo**, the
+edge-management project, shown as a working system rather than as slides.
+
+**The claim.** One vendor-neutral OPAS topology, naming no technology, is realized
+onto **two different delegate runtimes at once** — Margo for one device, a container
+realization for another — and an application placed by *where it belongs in the plant*
+reaches a concrete machine across **two substitution boundaries**. The point is
+coexistence: a delegate runtime is one realization among several beneath a single
+abstract service template, not a replacement for the orchestration layer above it.
+
+**What is worth watching, for this audience.** The interesting part is not that the
+abstract node was realized, but **how the orchestrator decided which realization**,
+and what the grammar for saying so looks like:
+
+- `directives: [substitute]` on an abstractly-typed node, and a realization's
+  `substitution_filter` matching on **manufacturer and model together**. Two
+  realizations differing only in model is the case that shows why manufacturer alone
+  is not enough.
+- `substituted_by` on the abstract node, and **attribute escalation across the
+  substitution boundary** — a value discovered on the device, readable at the abstract
+  layer. This is the part most people have not seen.
+- A realization whose filter **traverses to the device it is hosted on**
+  (`[SELF, RELATIONSHIP, Host, 0, TARGET, …]`) rather than reading anything about the
+  application itself. Selection follows placement, and the explicit keyword path is
+  what makes it expressible.
+- **Cross-service requirement matching** — requirements left dangling in one service
+  and matched against a *different* service at deploy time.
+
+**The distinction the demo argues.** Node operations are automation; relationship
+`Configure` operations at their weave points are orchestration. Worth naming
+explicitly, since it is the difference between this and a deployment tool.
+
+**Discussion sought:** whether the modelling patterns above are ones the community
+wants to write down — the substitution-filter idioms in particular, which are close
+to the placement mechanics already drafted in the design guide.
+
+## 3. The `0.1` release — 10 min · *I8 / I26 / N8*
+
+Two things stand between us and the tag, and neither has moved since 08-05:
+
+- **N8 — platform connection properties.** Still absent from the `abstract.*` types.
+  Sequenced behind **D11** (the credential model: a map keyed by kind, each value a
+  reference to where the credential is retrieved, never the value itself). Is the D11
+  write-up posted to #281, and does the sequence still hold — or do we ship `0.1`
+  without the connection properties and follow with a `0.1.1`?
+- **I26 — `HttpUrl` is not anchored at the end.** Unlike `Email` and `Fqdn`, which both
+  end with `$`, `HttpUrl` stops after the host and optional port, so everything after
+  that is unvalidated: `https://example.com garbage here`, a trailing newline with
+  further text, `https://example.com:99999`, and `http://999.999.999.999` all pass.
+  Appending `$` is **not** the fix — that would reject `https://example.com/path?q=1`,
+  which legitimately passes today. `core` ships in the `0.1`, so this is worth fixing
+  before the tag.
+
+  Second question behind it: `core` is now the community's standard library, so should
+  its data types carry **test cases**? A regex library without tests will drift again.
+
+The repository still carries **no tags**. Once the above is settled: push `v0.1` → the
+workflow builds and signs, opens a draft → review and publish.
+
+---
+
+## 4. Action-item review — *if time permits*
+
+- **Kubernetes profile testing** (Prachi, Jay) — feedback on `io.kubernetes:1.35`;
+  nothing has reached the repository yet.
+- **Tal's OpenAPI→TOSCA generator** — no PR is open yet; where it belongs in the
+  repository, and a date to walk it.
+- **D10 applied** — the `YAML` type and the `decode_yaml` / `validate_yaml` pair are in
+  `core`, all six `implementation-details` declarations in `abstract.base` are
+  `type: YAML`, and the base README records why. Confirm closed, subject to #2.
+
+## 5. Design-guide walkthrough — *if time permits*
+
+Carried from 08-05. Component/Port *Data placement* and *Secrets are references, not
+values*; the security split into perimeter / authn / authz / identity; profile
+organization's two dimensions; placement mechanics; filters and missing values; and the
+proposed resolution for `type-of-node` (*I13*) — recommending **not** adding a
+type-returning function, since platforms of the same type that differ only in what each
+is designated to become cannot be distinguished by type at all.
+
+## 6. Open items & AOB — *if time permits*
+
+- **I25 — monitoring and telemetry escalation.** The *bottom-up* counterpart to
+  top-down refinement: low-level monitoring data summarized into high-level
+  system-health attributes, via `substitution_mappings.attributes`. Needs a written
+  pattern. The demo (#2) exercises attribute escalation, so there is a worked example
+  to draw on.
+- **I24 — union types**, of which the credential model is one instance.
 - **Governance docs** — proposal to stop adding per-meeting entries to
-  `meeting-history.md` and let `decision-log.md` and `open-issues.md` carry the
-  record. The historical synthesis stays: `decision-log.md` and `open-issues.md`
-  reference meeting numbers 51 times, and the phase narrative is what resolves them.
-- Single source of truth for shared types (*I1 / I15*); errata (*I5, I7, I14, I23*);
-  Windows checkout failure (*I20*); contribution-load / second owners (*I11*).
+  `meeting-history.md` and let `decision-log.md` and `open-issues.md` carry the record.
+- Kubernetes application-level modeling (where microservice-to-microservice interaction
+  belongs); single source of truth for shared types (*I1 / I15*); errata (*I5, I7, I14,
+  I23*); Windows checkout failure (*I20*); contribution load and second owners (*I11*).
 
 ---
 
-**Decisions sought:** the YAML `implementation-details` convention (#2); the
-credential-model refinement for #281 (#3); cut `0.1` (#4).
+**Decisions sought:** the reading of §15.2 on unmapped substituting-template inputs, and
+where the answer is written down (#1); confirm the N8 sequence or ship `0.1` without it,
+and fix `HttpUrl` before the tag (#3).
