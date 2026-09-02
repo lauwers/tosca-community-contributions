@@ -3,8 +3,12 @@
 **Status:** Discussion draft. Every proposal in Section 2 was walked through at the
 2026-09-02 community meeting; Sections 2.1, 2.3, 2.4, 2.6 and 2.7 were agreed there and are
 to be written into the community profiles. Each proposal states its own status, and each
-records what the meeting changed about it. Section 5 lists what the meeting added that this
-document does not yet cover.
+records what the meeting changed about it.
+
+**A section leaves this document once it reaches the profiles**, in two directions: the decision
+to the [decision log](../../../../governance/decision-log.md), and the description of the types to
+the README of the profile that declares them. A section that has been implemented is a third copy
+of both. What stays here is what is still proposed or still open.
 **Audience:** TOSCA Community
 **Purpose:** Capture a concrete set of proposed enhancements to the community
 abstract profiles, together with the problems uncovered while prototyping them
@@ -12,16 +16,16 @@ and the decisions reached during community discussion.
 
 **Related documents:** [README](../README.md) · [prior-art](prior-art.md) · [design-guide](design-guide.md) · [meeting-history](../../../../governance/meeting-history.md) · [decision-log](../../../../governance/decision-log.md) · [open-issues](../../../../governance/open-issues.md)
 
-**How this document is organized.** Five parts, which cross-reference each other by number.
+**How this document is organized.** Four parts, which cross-reference each other by number.
 **Section 1** says why these changes are being proposed. **Section 2** is the proposals
 themselves, grouped by profile in the order the profiles build on each other, each carrying
-its own status. Two profiles have more than one proposal. **Section 3** is the reasoning: the
+its own status. Two profiles have more than one proposal. Section 2.9 concerns `core` and
+`abstract.base` jointly and sits last rather than beside Section 2.1, so that the section numbers
+already in circulation keep their meaning. **Section 3** is the reasoning: the
 problems found while prototyping, numbered *Problem 1* through *Problem 7*, and most Section 2
 proposals point at the problem that motivates them. **Section 4** records what the community has
 settled and what is still open, numbered *question 1* through *question 9* — so a reference to
-"question 2" anywhere above means the second entry there. **Section 5** holds what the
-2026-09-02 discussion added and Section 2 does not yet cover: material recorded from that
-meeting, to be worked up into a proposal of its own.
+"question 2" anywhere above means the second entry there.
 
 ---
 
@@ -62,8 +66,8 @@ types and the same-type constraint with them.
 **Status: agreed 2026-09-02** — *"I agree with this approach, because it's general, and it
 applies to most of the cases"* (Roberto). Recorded as decision D13. Supersedes the credential
 model recorded in Sections 2.4 and 2.5. It covers a credential the model *references*; a
-credential the orchestrator *creates* needs the node-type pattern of
-[Section 5.1](#51-orchestrated-credentials).
+credential the orchestrator *creates* needs the capability and node types proposed in
+[credential-orchestration-proposal.md](credential-orchestration-proposal.md).
 
 A credential in a model is a **reference** to material, never the material. The value carries
 the path to the file holding it and an identifier where one is needed; the material is read on
@@ -181,7 +185,7 @@ Deployment layering is a single concept, so it should have a single relationship
 single requirement name, declared once on `Base`, with the *capability* saying what kind of
 thing is being placed.
 
-This is the [Component/Port pattern](design-guide.md#componentport-pattern) applied to
+This is the [Component/Port pattern](design-patterns.md#componentport-pattern) applied to
 deployment. The capability is the port, and names the functionality a node exposes — *I can
 host a platform*, *I can provide an execution environment*, *I can hold data*. The relationship
 names the intent of the source toward that port. Three relationship types that differ only in
@@ -616,6 +620,94 @@ case the one an author gets without asking for it.
 Both are declared today in a downstream extension, alongside the `host` requirement onto a
 virtualization platform that Section 2.3 notes in passing. The requirement is proposed there;
 these two properties are what remains.
+
+### 2.9 `community.tosca.core` and `community.tosca.abstract.base` — core as a standard library
+
+**Status: open, not yet discussed.** No corresponding problem section: nothing is broken today, and
+what the change buys is a `core` that a profile can import without taking a modelling approach with
+it.
+
+Move the three base capability types and the three base relationship types — `Container`,
+`Feature`, `Partner`, `ContainedBy`, `DependsOn`, `AssociatesWith` — from `community.tosca.core`
+into `community.tosca.abstract.base`, and delete the `Bash` artifact type. `core` then holds data
+types, functions, and the one artifact type its own function implementations name.
+
+**This is what `core` is already said to be for.** The decision to add a standard library of data
+types describes `core` as the community's library of types and functions. Data types and functions
+serve any profile whatever it models. The six base types serve one modelling approach — the
+[Component/Port pattern](design-patterns.md#componentport-pattern), with three connection kinds and a
+capability paired to each.
+
+**`Python` stays and `Bash` goes, on the same test.** `core` names `Python` sixteen times, once in
+every function implementation it declares, so the artifact type is a dependency of the profile's own
+content rather than a convenience offered to consumers. `Bash` has no such standing: a TOSCA
+function is implemented by a module the processor calls, which is not something a shell script does,
+and no profile in the repository names `type: Bash` at all. The definition that is wanted lives in
+`community.tosca.technology.base`, which declares its own `Bash` with a `host` property so a script
+can be run on a particular host rather than on the orchestrator — the form an operation
+implementation needs, at the level that has operation implementations. Deleting `core`'s copy also
+removes a name defined twice in profiles that import one another.
+
+**Every type derived from the six already lives in `abstract.base`:**
+
+| base type, in `core` | derived types, all in `abstract.base` |
+|---|---|
+| `Container` | `PlatformHost`, `ExecutionEnvironment`, `DataPlatform` |
+| `Feature` | `DataSource`, `Linkable` |
+| `Partner` | — ([Section 2.6](#26-communitytoscaabstractapplication--one-interaction-port-specialized-per-kind) adds `Service`) |
+| `ContainedBy` | `HostedOn`, `RunsOn`, `AvailableOn` |
+| `DependsOn` | `Processes`, `LinksTo` |
+| `AssociatesWith` | — (Section 2.6 rederives `InteractsWith`) |
+
+The parent sits one profile below every one of its children, with nothing in between. That the two
+rows with no children are exactly the two Section 2.6 gives children to is the point: the whole
+hierarchy is one design, split across two profiles at an arbitrary line.
+
+**The capabilities and the relationships have to move together.** `Container` names `ContainedBy`
+in `valid_relationship_types` and `ContainedBy` names `Container` in `valid_capability_types`, so
+neither resolves without the other. They belong wherever the types that refine them are.
+
+**A profile may want the library without the vocabulary.** `community.tosca.technology.base` is the
+case already in the repository: it imports `core`, defines artifact types, interface types and node
+types of its own, and uses none of the six. Today that import carries a set of relationship and
+capability types it has no use for. After the move it takes the data types and functions and
+nothing about how nodes connect.
+
+**The profiles already carry two base layers, one per view, and `core` already sits under both.**
+`abstract.base` is the base of the System View column; `community.tosca.technology.base` is the base
+of the technology- and vendor-specific column, and it declares its own root node type, its own
+`Bash` artifact type with a `host` property for remote execution, and its own `Standard`:
+
+| | `Standard` operations |
+|---|---|
+| `community.tosca.abstract.base` | `create`, `modify`, `delete` |
+| `community.tosca.technology.base` | `create`, `configure`, `start`, `modify`, `stop`, `delete` |
+
+The System View declares the operations a substituting template can map to a workflow; the
+implemented views declare the lifecycle their artifacts drive. That difference is already settled
+practice here, and it is the same reasoning applied to interfaces that this proposal applies to the
+base capability and relationship types: what every profile shares is the library, and what one
+column shares belongs to that column's base.
+
+**A relationship type is not neutral across levels of abstraction the way a data type is.** An
+`HttpUrl` means the same thing wherever it appears. A relationship type does not. At a level whose
+nodes are realized by substitution, a relationship carries structure and nothing else: substitution
+applies to node types — `substitution_mappings` takes a `node_type`, and TOSCA defines no
+relationship counterpart — so an interface declared on a relationship could only ever be
+implemented by an artifact supplied at that same level, which is precisely what an abstract level
+does not do. At a level whose nodes are realized by artifacts, the same three kinds of relationship
+reasonably carry lifecycle interfaces. The three kinds are general; a particular declaration of
+them is not, and it belongs with the node types it is declared alongside.
+
+**Nothing reachable today becomes unreachable.** `abstract.base` imports `core` into the default
+namespace and every profile above imports `abstract.base`, so the transitive chain is unchanged for
+every consumer. Two files import `core` directly and use one of the six: `abstract.base` itself,
+which would then define them, and `abstract.application`, which imports `abstract.base` into the
+default namespace as well and goes on resolving `Feature` and `DependsOn` through it.
+
+**Order against the other proposals.** Section 2.3 collapses the containment relationship types and
+Section 2.6 adds a capability under `Partner`, so both edit types this proposal moves. Either order
+works; taking this one first means the other two are made in a single profile.
 
 ---
 
@@ -1148,40 +1240,3 @@ declared on `Application` and derived from `Partner`, with `Endpoint` rederived 
 should `InteractsWith` rederive from `AssociatesWith` rather than `DependsOn`, and should the
 same-type constraint go? Proposal in Section 2.6, reasoning in Problem 7 — which also asks
 whether `Processes` should distinguish reading a dataset from writing one.
-
----
-
-## 5. Recorded from the 2026-09-02 discussion, not yet proposed
-
-### 5.1 Orchestrated credentials
-
-Section 2.1 covers a credential the model **references**. It does not cover a credential the
-orchestrator **creates**, which is a different thing and needs node types rather than a data
-type. Raised by Tal on discussion #281.
-
-Deploying a virtual machine is the ordinary case: the key pair is generated first and the public
-half handed to the provider along with the request, so the key pair is itself an orchestrated
-entity with a lifecycle, not an input the author supplies. The same holds for a certificate
-issued during deployment, a token minted for a service, or a password generated for a database.
-
-The pattern that has held across all of those:
-
-- **A node type per kind of orchestrated secret** — a key pair, a certificate, a token. Its
-  creation operation produces the material and writes it wherever the deployment keeps such
-  things, a protected file or a vault.
-- **A capability of type `Credential` on that node**, holding a map of `CredentialRef` as
-  Section 2.1 defines it. The node is what has a lifecycle; the capability is
-  what other nodes can point at.
-- **A requirement on every node that needs the material**, targeting that capability. The
-  consumer names what it needs and the topology says where it comes from, rather than the author
-  copying a reference into two places.
-
-What makes this fit the rest of the model is that the material still never appears in it. The
-node's creation produces the secret, the `CredentialRef` says where it went, and a consumer
-reaches it through the graph.
-
-Two pieces are still to be worked out before this becomes a Section 2 proposal: which profile
-the `Credential` capability type belongs in — `core` holds the data types, but a capability type
-is not a data type — and whether the orchestrated-secret node types belong in the abstract
-profiles at all or only in the technology profiles that know how to create each kind. Tracked as
-I27 in [`open-issues.md`](../../../../governance/open-issues.md).

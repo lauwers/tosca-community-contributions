@@ -3,6 +3,57 @@
 This profile defines general-purpose TOSCA types that are intended to
 be shared by all other profiles.
 
+## Data Types
+
+Every data type here but one derives from a TOSCA primitive and adds a validation clause, so a
+value is an ordinary string or integer that has been checked. `IPv4Socket` is the exception, a
+complex type composed of two of the others.
+
+**The regular expressions avoid look-around assertions**, deliberately, so that they work in regex
+engines that do not support them. Two consequences are documented on the types themselves: `Fqdn`
+does not enforce the 253-character DNS name limit, and `Email` accepts most common addresses without
+being fully compliant with RFC 5321 and RFC 5322.
+
+### Structured encodings
+
+- **`JSON`**, **`YAML`** — a string carrying a document in that format, validated by the
+  corresponding function below. `YAML` is the type the `implementation-details` property uses to
+  carry values across a substitution boundary, so any profile using that property depends on the
+  YAML parser those functions need.
+
+### Network addressing
+
+- **`IPv4`** — a dotted-quad IPv4 address.
+- **`Port`** — an integer from 0 to 65535. Zero is admitted because it is the conventional way to
+  ask for an unspecified port; a URL cannot name it, which is why `HttpUrl` accepts only 1 to 65535.
+- **`IPv4Socket`** — an address and a port together, as `ip-address` and `transport-port`. The only
+  complex type in this profile.
+
+### Names and addresses
+
+- **`Email`** — an email address.
+- **`Fqdn`** — a fully qualified domain name.
+- **`HttpUrl`** — an HTTP or HTTPS URL whose host is `localhost`, an FQDN or an IPv4 address,
+  optionally followed by a port and by a path, query or fragment built from the characters RFC 3986
+  permits. Anchored at both ends, so the whole value must be a URL rather than merely begin with
+  one.
+
+### Identifiers
+
+- **`GenericId`** — a string identifier with no constraint of its own. It exists to be derived from,
+  by a type that adds the validation its identifiers need.
+- **`AlphanumericId`** — letters and digits, any length.
+- **`UUID`** — an RFC 4122 UUID, versions 1 through 5.
+- **`UUIDRelaxed`** — the 8-4-4-4-12 hexadecimal form without the version and variant constraints.
+
+> **Two credential reference types are agreed and not yet declared here.** `CredentialRef` carries
+> the path to where credential material is retrieved and, where one is needed, a `name`;
+> `NamedCredentialRef` derives from it and makes `name` mandatory. Agreed on 2026-09-02 as decision
+> D13; Section 2.1 of the [abstract-profile
+> proposal](../docs/abstract-profile-proposed-changes.md) has the detail, and
+> [credential-orchestration-proposal.md](../docs/credential-orchestration-proposal.md) proposes the
+> capability and node types that use them.
+
 ## Relationship Types
 
 This profile defines three different *kinds* of top-level
@@ -82,83 +133,25 @@ its management and monitoring touch points, its security and trust
 surface, and so on. These categories, and the common capability and
 relationship types recommended for each, are described by the
 Component/Port pattern in the
-[design guide](../docs/design-guide.md#componentport-pattern). New derived
+[design patterns](../docs/design-patterns.md#componentport-pattern). New derived
 capability types should be slotted into one of those categories rather
 than introduced ad hoc, so the type library stays a catalog rather than
 a loose collection.
 
 ## Artifact Types
 
-The core profile defines two artifact types that can serve as
-implementations. An artifact type that can implement something must say
-how values reach the artifact and how results come back, or an artifact
-written for one orchestrator will not run on another.
+This profile declares two artifact types that can serve as implementations:
 
-### `Python`
+- **`Python`** — a Python script. It implements both operations and TOSCA
+  functions, and the two have different calling conventions.
+- **`Bash`** — a shell script, implementing operations.
 
-A Python script. The same artifact type is used for two different kinds of
-implementation, and the two have different calling conventions.
-
-#### As an operation implementation
-
-- Input values are passed as *environment variables*, one for each input
-  defined in the corresponding interface operation, each named after the
-  input.
-- Values for *TOSCA Primitive Types* and *TOSCA Special Types* are passed
-  directly, in their TOSCA spelling — a boolean arrives as `true` or
-  `false`.
-- Values for *TOSCA Complex Data Types* and *TOSCA Collection Types* are
-  passed as JSON-encoded strings.
-- An input with no value is passed as the four characters `null`, which is
-  distinct from an empty string.
-- Output values are printed to `stdout` as JSON or YAML, decoded by the
-  orchestrator into separate output values whose names must match the
-  operation's output definitions.
-
-This is the same convention the `Bash` artifact type uses, and it is
-described in full in the [technology base
-profile](../technology/base/README.md).
-
-#### As a function implementation
-
-- Arguments are passed as an **ordered list of values**, matching the
-  `arguments` of the signature the function was called through. They are
-  not named, and they are not passed as environment variables.
-- The artifact returns a **single value**, of the type the signature's
-  `result` declares. There are no named outputs.
-- The artifact must define an **entry point named after the TOSCA
-  function**. `to_uppercase` is implemented by a `to_uppercase` callable in
-  `functions/to_uppercase.py`.
-
-> The difference between these two conventions is not about how an
-> orchestrator invokes the artifact — in its own interpreter or as a
-> subprocess — which is an implementation choice and not part of the
-> contract. It is that an operation exchanges *named* values in both
-> directions while a function takes *positional* arguments and returns
-> *one* result. An artifact written for one cannot serve as the other.
-
-#### Runtime environment
-
-What an implementation may assume about its runtime *is* part of the
-contract, and is currently unstated. The functions in this profile use the
-Python standard library only, with one exception: `decode_yaml` imports a
-YAML parser, and so depends on a package the orchestrator must make
-available. An artifact type that does not say which packages an
-implementation may rely on leaves that dependency to be discovered at
-deployment.
-
-> Conventions for declaring an implementation's package dependencies, and
-> for the Python version an implementation may assume, are open.
-
-### `Bash`
-
-A shell script, using the operation calling convention described above.
-
-> `Bash` is declared both here and in the technology base profile, where
-> it additionally carries a `host` property and full documentation of its
-> conventions. TOSCA typing is nominal, so these are two distinct types
-> and an artifact of one cannot satisfy a definition expecting the other.
-> Which of the two profiles should own it is unsettled.
+How values reach an implementation and how results come back is in
+[artifact-conventions.md](../docs/artifact-conventions.md), which is the single
+place these are described. `Bash` is also declared in the
+[technology base profile](../technology/base/README.md), which is the copy that
+carries a `host` property; the duplication is addressed by Section 2.9 of the
+[abstract-profile proposal](../docs/abstract-profile-proposed-changes.md).
 
 ## Functions
 
