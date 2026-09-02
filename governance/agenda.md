@@ -3,14 +3,18 @@
 **Status:** Draft agenda for 2026-09-09, following 2026-09-02
 **Related documents:** [abstract-profile-proposed-changes](../profiles/community/tosca/docs/abstract-profile-proposed-changes.md) · [platform README](../profiles/community/tosca/abstract/platform/README.md) · [design-guide](../profiles/community/tosca/docs/design-guide.md) · [open-issues](open-issues.md) · [decision-log](decision-log.md)
 
-Last week walked the proposed-changes document end to end and agreed five of its eight
-proposals — 2.1, 2.3, 2.6, 2.7 and 2.8 — recorded as decisions N9 through N12 and D13.
+Last week walked the proposed-changes document end to end and agreed five of the eight
+proposals it then held — 2.1, 2.3, 2.4, 2.6 and 2.7 — recorded as decisions N9 through N12
+and D13, taking 2.8 as provisional. A ninth has been added since, and is item 4 below.
 What is left is narrower and of a different kind: three questions the walk-through
-*opened*, one it left unfinished, and the edits themselves.
+*opened*, one added since, one it left unfinished, and the edits themselves.
 
 **The release is now the organizing item.** I8 no longer waits on a design decision; it
-waits on the edits, and on three questions that decide what those edits say. Everything
-in items 1 to 3 is on the release path. Everything after it is not.
+waits on the edits, and on four questions that decide what those edits say. Everything
+in items 1 to 4 is on the release path. Everything after it is not.
+
+**Items 1 to 6 run to 75 minutes.** If the hour is firm, item 5 is the one to drop — it is
+the only release-path-adjacent item that changes nothing the `0.1` freezes.
 
 ---
 
@@ -76,7 +80,39 @@ them would tell us how many more of these decisions are coming.
 the `0.1` rather than freeze it unresolved. Deferring is a legitimate outcome; leaving it
 undecided while the tag is cut is not.
 
-## 4. `control-host` — the piece 2.3 did not finish — 15 min · *Questions 6 and 8*
+## 4. Is `core` the standard library, or also the base of one modelling approach? — 10 min · *I33* · **decision sought**
+
+**Section 2.9, added after this agenda was first drafted.** It is on the release path
+because it moves types *between* profiles, and a release freezes where they live.
+
+`core` holds the data types, artifact types and functions any profile can use, and also
+the three base capability types and three base relationship types that express one way of
+connecting nodes. The proposal moves the six into `abstract.base` and deletes the unused
+`Bash`, leaving `core` the standard library the D9 discussion described.
+
+**The argument is that the hierarchy is already split at an arbitrary line.** Every type
+derived from the six is in `abstract.base` — `PlatformHost`, `ExecutionEnvironment` and
+`DataPlatform` from `Container`; `HostedOn`, `RunsOn` and `AvailableOn` from `ContainedBy`
+— so each parent sits one profile below every one of its children with nothing between.
+The two base types with no children, `Partner` and `AssociatesWith`, are exactly the two
+Section 2.6 gives children to.
+
+**And a consumer depends on the answer.** A profile that imports `core` for its data types
+must import it into the default namespace for those types to flow on transitively, and
+TOSCA has no selective import — so it takes the six base types as well, and collides with
+any of the six it declares itself. `community.tosca.technology.base` is the case already
+in the repository: it imports `core`, declares its own artifact, interface and node types,
+and uses none of the six.
+
+**Preparation:** the question is whether the six are library content or the vocabulary of
+one modelling approach. N13 removed the objection that they must be shared across levels —
+capability and requirement mappings impose no type compatibility, so a profile at another
+level may define its own.
+
+**Decision sought:** move the six to `abstract.base`, or keep them in `core` and accept
+that a consumer takes the vocabulary with the library.
+
+## 5. `control-host` — the piece 2.3 did not finish — 15 min · *Questions 6 and 8*
 
 N9 settled the requirement name `host`. It did not settle the second requirement.
 
@@ -99,7 +135,7 @@ Two decisions, and the first is small:
 
 **Decision sought:** the name, and which of the two models the profiles adopt.
 
-## 5. Orchestrated credentials — 10 min · *I27* · **first look**
+## 6. Orchestrated credentials — 10 min · *I27* · **first look**
 
 **Section 5.1**, written up since 09-02. D13 covers a credential the model *references*;
 this covers one the orchestrator *creates* — a key pair generated before a VM request, a
@@ -120,7 +156,7 @@ answered.
 
 ---
 
-## 6. If time permits
+## 7. If time permits
 
 - **Substitution filters against the revised types (I32).** N9 and N11 move the abstract
   types' structure into requirements and capabilities, which is what a substitution
@@ -139,8 +175,8 @@ answered.
 
 **Decisions sought:** the `mgmt-address` type (#1); the container-platform credential
 vocabulary (#2); `RelationalDatabase` as a derived type or a technology value, or an
-explicit deferral out of the `0.1` (#3); the `control-host` name and the control-node
-workload model (#4).
+explicit deferral out of the `0.1` (#3); whether the base capability and relationship types
+move out of `core` (#4); the `control-host` name and the control-node workload model (#5).
 
-**Everything in #1 to #3 is on the `0.1` path.** After those three, what stands between
+**Everything in #1 to #4 is on the `0.1` path.** After those four, what stands between
 the community and its first tag is editing the profiles.
