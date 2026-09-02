@@ -51,10 +51,12 @@ include the following:
 The `ContainerPlatform` node type represents systems that can host
 containerized software. This can include:
 
-- *Docker Servers*: Server platforms that have technologies such as
-   Docker or Docker Compose installed and that can be used to deploy
-   and run containerized applications.
-- *Kubernetes Clusters*: To orchestrator container-based applications
+- *Container Runtimes*: Engines that run containers on a single host,
+  such as Docker Engine or containerd. A container runtime is modeled
+  as its own node, hosted on the `ServerPlatform` node that represents
+  the host it is installed on.
+- *Kubernetes Clusters*: To orchestrate container-based applications
+  across one or more hosts.
 
 ### PaaS Platforms
 
@@ -93,7 +95,7 @@ representations of pre-existing platform resources, these types can
 also be used for *orchestrating* new platform resources. In those
 cases, newly orchestrated platform nodes must be *layered* on top of
 already-existing platform nodes. This layering is expressed using a
-`HostedOn` relationship, and and the corresponding platform node types
+`HostedOn` relationship, and the corresponding platform node types
 must express valid target nodes in their `host` requirement.
 
 The section describes several examples of platform layering.
@@ -121,11 +123,11 @@ representing the server on which Proxmox is installed.  The Proxmox
 node can then in turn be used to *host* other (virtual) server
 platforms.
 
-The complete scneario is shown in the following figure:
+The complete scenario is shown in the following figure:
 
 ![IaaS Platform on Server Platform](images/iaas-on-server.png)
 
-### IaaS Platform on a Kubernetes Clusters
+### IaaS Platform on a Kubernetes Cluster
 
 A similar scenario involves extending Kubernetes with support for
 virtualization using Kubevirt. Kubevirt allows for the use of
@@ -133,11 +135,11 @@ Kubernetes APIs to create and manage virtual machines on KVM.
 
 This use case can be modeled using a `VirtualizationPlatform` node
 that represents Kubevirt and that has a `HostedOn` relationship to a
-`ContainerPlatform` node that represents the Kubernetes. The Kubevirt
+`ContainerPlatform` node that represents the Kubernetes cluster. The Kubevirt
 node can then in turn be used to *host* other virtual server
 platforms.
 
-The complete scneario is shown in the following figure:
+The complete scenario is shown in the following figure:
 
 ![IaaS on Kubernetes Cluster on Server Platform](images/iaas-on-cluster.png)
 
@@ -171,22 +173,50 @@ observation:
   *hosting*.
 - However, for some platforms (such as Kubevirt), it may be necessary
   to model deployment of the control plane separately from deployment
-  of the data plan. This is done by defining a second requirement in
-  the `Platform` node type that specifies where control is
-  hosted. This requirement uses the `RunsOn` relationship type rather
-  than the `HostedOn` relationship type.
+  of the data plane. This needs a second requirement on the `Platform`
+  node type saying where control is hosted, alongside `host` saying
+  where the data plane is.
 
-  > Is it necessary to have a different relationship type, or is it
-    sufficient for this requirement to have a different name?
+  > **Proposed, not yet present.** `Platform` declares `host` and
+    `links-to` only, so the models below cannot be written down against
+    the profile as it stands. The requirement is proposed as
+    **`control-host`** in [Section 2.3 of the abstract-profile
+    changes](../../docs/abstract-profile-proposed-changes.md#23-communitytoscaabstractbase--one-containment-relationship-one-requirement-name), which also answers the question this section used to
+    ask — whether a distinct relationship type is needed, or a distinct
+    requirement name suffices. A distinct name suffices: the same
+    relationship carries both senses either way, so the difference
+    belongs on the requirement.
   
 Using this approach, the abstract `VirtualizationPlatform` node that
-represents Kubevirt node has a `HostedOn` relationship to the
+represents the Kubevirt node has a `HostedOn` relationship to the
 underlying `ServerPlatform` node on which Kubernetes is deployed, and
-it has an additional `RunsOn` relationship to the `ContainerPlatform`
+it binds `control-host` to the `ContainerPlatform`
 node representing the Kubernetes cluster. The updated model is shown
 in the following figure:
 
 ![IaaS on Kubernetes Cluster on Server Platform](images/iaas-on-cluster-new.png)
+
+### Container Runtime on a Server
+
+The simplest container platform layering scenario installs a container
+runtime, such as Docker Engine or containerd, on a server. It is
+modeled using a `ContainerPlatform` node that represents the runtime
+and that has a `HostedOn` relationship to the `ServerPlatform` node
+representing the server on which the runtime is installed. The
+`ContainerPlatform` node in turn hosts the containerized applications
+that the runtime runs.
+
+```mermaid
+graph BT
+    engine["ContainerPlatform<br/>(container runtime)"] -->|HostedOn| server["ServerPlatform<br/>(server)"]
+    app["Application"] -->|RunsOn| engine
+```
+
+A container runtime provides its control plane on the same host that
+runs its containers, so a single `HostedOn` relationship expresses
+where both are deployed. This is the common case described above, in
+contrast to Kubevirt, where the two are deployed on different
+platforms.
 
 ### Kubernetes Cluster on one or more Servers
 
@@ -209,8 +239,8 @@ servers on which the cluster is deployed.
 
 Furthermore, Kubernetes distinguishes between *Control* nodes and
 *Worker* nodes. To indicate which server acts as the control node in
-the Kubernetes cluster, we use the `RunsOn` relationship of the
-`ContainerPlatform` node. The complete model is shown in following
+the Kubernetes cluster, the `ContainerPlatform` node binds
+`control-host` to it. The complete model is shown in following
 figure:
 
 ![Kubernetes Cluster on Multiple Server Platforms](images/cluster-on-multiple-server.png)
@@ -225,8 +255,8 @@ following figure:
 
 And finally, Kubernetes clusters are typically deployed in *High
 Availability* mode where multiple servers act as redundant control
-nodes. This scenario can be modeled using multiple `RunsOn`
-relationships as shown in the following figure:
+nodes. This scenario can be modeled using multiple `control-host`
+bindings as shown in the following figure:
 
 ![Kubernetes Cluster with HA Control Nodes](images/cluster-ha-control-on-server.png)
 
@@ -238,6 +268,65 @@ relationships as shown in the following figure:
 > - how is the total number of nodes communicated to the substituting template?
 > - how is the number of control nodes communicated?
 > - how can we communicate whether the control nodes can host workloads?
+
+### Does a control node also host workloads?
+
+The third question above is the one the model does not yet answer. Assume the
+`ContainerPlatform` has two placement requirements — `host` for the servers that run workloads
+and a second for the control plane, proposed as `control-host` in
+[the abstract-profile changes](../../docs/abstract-profile-proposed-changes.md#23-communitytoscaabstractbase--one-containment-relationship-one-requirement-name).
+Having both does not by itself settle how to say that the machine running the control plane is
+*also* available for workloads. Two models, recorded here as the choice rather than the
+answer.
+
+*Model A — set overlap*, which is what the figures above describe. `host` lists every
+server that hosts workloads, `control-host` lists the control nodes, and a control node that
+also hosts workloads appears in both:
+
+```yaml
+  requirements:                      # master on server_1, which also hosts workloads
+    - host: server_1
+    - host: server_2
+    - host: server_3
+    - control-host: server_1
+
+  requirements:                      # master on server_1, control-only
+    - host: server_2
+    - host: server_3
+    - control-host: server_1
+```
+
+Both questions are then answered by traversal: which server runs the control plane is the
+`control-host` target, and whether it hosts workloads is whether it also appears under `host`
+— which `$has_entry` reads directly, so a substitution filter can select a tainting
+realization from a non-tainting one.
+
+What Model A lacks is a way to *act* on it. A realization needs a worker on every host except
+the one that is also the control host, and a requirement mapping cannot select a subset of
+bindings: `[host, UNBOUNDED]` takes all of them and cannot skip one.
+
+*Model B — disjoint sets and a property.* `host` lists only servers that host workloads and
+are not control nodes, and a property carries the rest:
+
+```yaml
+  properties:
+    schedulable_control_nodes: true
+  requirements:
+    - host: server_2
+    - host: server_3
+    - control-host: server_1
+```
+
+Directly realizable — every `host` binding becomes a worker, `control-host` becomes the
+controller, no subsetting — at the cost of a graph that no longer answers "which servers run
+workloads" by traversal, since `server_1` does but does not appear under `host`.
+
+The trade is between a model that states the topology honestly and one that can be built
+today. Model A is preferable if the subsetting limitation is treated as something to fix;
+Model B is the pragmatic choice if it is not.
+
+---
+
 
 ### Managed Kubernetes Clusters
 
@@ -251,12 +340,12 @@ diagram:
 
 > This figure (and other figures that include `VirtualizationPlatform`
   nodes) assume there is one such node for each cloud region. Is that
-  the correct approach. Alternatively, we could define one
+  the correct approach? Alternatively, we could define one
   `VirtualizationPlatform` node and use a `region` input value for the
   relevant operation inputs.
 
 While managed Kubernetes clusters use the same `ContainerPlatform`
-node type as the kubernetes deployments on server platforms, there are
+node type as the Kubernetes deployments on server platforms, there are
 a number of differences that impact the definition of the
 `ContainerPlatform` node type:
 
