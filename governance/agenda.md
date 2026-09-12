@@ -1,7 +1,7 @@
 # TOSCA Community — Proposed Agenda (2026-09-16)
 
 **Status:** Draft agenda for 2026-09-16, following 2026-09-09
-**Related documents:** [abstract-profile-proposed-changes](../profiles/community/tosca/docs/abstract-profile-proposed-changes.md) · [platform README](../profiles/community/tosca/abstract/platform/README.md) · [design-guide](../profiles/community/tosca/docs/design-guide.md) · [credential-orchestration-proposal](../profiles/community/tosca/docs/credential-orchestration-proposal.md) · [artifact-calling-convention-proposal](../profiles/community/tosca/docs/artifact-calling-convention-proposal.md) · [spec-naming-conventions-proposal](../profiles/community/tosca/docs/spec-naming-conventions-proposal.md) · [open-issues](open-issues.md) · [decision-log](decision-log.md)
+**Related documents:** [abstract-profile-proposed-changes](../profiles/community/tosca/docs/abstract-profile-proposed-changes.md) · [platform README](../profiles/community/tosca/abstract/platform/README.md) · [modeling-methodology](../profiles/community/tosca/docs/modeling-methodology.md) · [credential-orchestration-proposal](../profiles/community/tosca/docs/credential-orchestration-proposal.md) · [artifact-calling-convention-proposal](../profiles/community/tosca/docs/artifact-calling-convention-proposal.md) · [spec-naming-conventions-proposal](../profiles/community/tosca/docs/spec-naming-conventions-proposal.md) · [open-issues](open-issues.md) · [decision-log](decision-log.md)
 
 Last week had two participants. It took the one item that was blocking work — Section 2.9,
 now **decision A8**: `core` becomes the standard library and the six base capability and
@@ -16,15 +16,36 @@ discussion opened before it can have one (item 8).
 **September is the deadline the chair set, and three meetings remain in it.** The `0.1` no
 longer waits on any design decision — it waits on the edits, and on four questions that decide
 what those edits say. Items 1 to 4 are those four. Everything else on this agenda can slip past
-the tag without changing it.
+the tag without changing it, except I46 in item 5, which amends an edit the tag makes and can
+slip only as a breaking change in the next version.
 
-**Items 1 to 10 run to 115 minutes, and the meeting is 60.** The four release-path items take
-50 of those, which is the hour once anything else is reached at all. **Item 6 is the one not to
+**Items 1 to 10 run to 125 minutes, and the meeting is 60.** The four release-path items take
+55 of those, which is the hour once anything else is reached at all. **Item 6 is the one not to
 defer again** — its three drafted resolutions have now been carried past five meetings without
 being read, and if the hour is short it is better to ratify one of them than to move all three
 a sixth time.
 
 ---
+
+## Notice — the design guide is now `modeling-methodology.md` — 2 min · **for information**
+
+When the documentation was reorganized on 09-02, the design guide kept the methodology alone —
+the Model Continuum, translating between levels, deploying abstract services — and the
+Component/Port pattern and the practices built on it moved to
+[`design-patterns.md`](../profiles/community/tosca/docs/design-patterns.md). "Design guide" and
+"design patterns" then no longer said which of the two to open, so the guide is renamed for what
+it holds: [`modeling-methodology.md`](../profiles/community/tosca/docs/modeling-methodology.md),
+titled *TOSCA Community Modeling Methodology*. Beyond the title and the opening paragraph, one
+section is new: [*Two Vantage Points*](../profiles/community/tosca/docs/modeling-methodology.md#two-vantage-points)
+opens the document by saying it is written from the system architect's vantage point rather
+than a target-driven one, with *model once, run everywhere* as its aim, and that target-driven
+profiles make up the continuum's lower levels. The rest of the content is unchanged.
+
+- **Links inside the repository** are repointed, section anchors included. Where a document
+  cited "the design guide" for the naming principle or for data placement, it now points at the
+  Component/Port pattern, which is where those have lived since 09-02.
+- **Links from outside the repository** to `design-guide.md` stop resolving. Anyone who has
+  bookmarked or cited it should update the link; the section anchors are unchanged.
 
 ## 1. `relationship_kind` — metadata carries neither inheritance nor obligation — 10 min · *I44* · **decision sought**
 
@@ -89,17 +110,25 @@ proposal rather than a design position, so this is a question of what to add, no
 declares, so a kind left out here cannot be added by a downstream profile without changing the
 abstract type again — which is why it has to be right before the `0.1` freezes it.
 
-## 4. `RelationalDatabase` — derived type or technology value? — 15 min · *I30 / I31 / I4*
+## 4. `RelationalDatabase` — derived type or technology value? — 20 min · *I30 / I31 / I4 / I45*
 
-Carried from 09-09, not reached. `Base` already carries `technology` and `vendor`, so
-`AtRestData` with `technology: relational` and `vendor: postgres` expresses the same thing
+Carried from 09-09, not reached. `Base` already carries `technology` and `product`, so
+`AtRestData` with `technology: relational` and `product: postgresql` expresses the same thing
 Section 2.5 derives a type for. Roberto asks whether the relational/NoSQL distinction belongs at
 this level or is a technology detail; the counter-precedent is `ContainerPlatform` against
 `VirtualizationPlatform`, which sit at this level for a distinction of the same kind.
 
 Roberto's own tiebreaker is the usable one: **a derived type earns its place if it has properties
-specific to it** — a schema, for instance. Applying it needs the reason the derived type was
-introduced, which is being recovered (credential specialization is the suspicion).
+specific to it** — a schema, for instance. **Applied, it says this one does not.** Section 2.5
+gives `RelationalDatabase` one property, `credential`, and every at-rest store is authenticated to,
+so nothing in it is specific to relational data. The downstream profile the type came from
+confirms it from the other side:
+
+- the type was introduced without a recorded reason;
+- no template sets its `credential`, and no realization reads it;
+- its one realization selects on the `technology` property, not on the type.
+
+Nothing depends on the derived type.
 
 This is the concrete instance of **I4**, the abstract-types against minimal-types question, and
 settling it here gives the rule a worked case rather than a principle.
@@ -109,11 +138,19 @@ profiles, and `AtRestData` is the only at-rest type. Stefano's reverse-engineeri
 storage constructs across providers, and an inventory of them would tell us how many more of
 these decisions are coming.
 
-**Decision sought, or an explicit deferral:** Section 2.5 is a candidate to hold out of the `0.1`
-rather than freeze it unresolved. Deferring is a legitimate outcome; leaving it undecided while
-the tag is cut is not.
+**Also here: I45.** `AtRestData` is named on a security axis, *at rest* as against *in transit*
+and *in use*, while its five siblings are named for how data is delivered. So the name suggests
+the others are not at rest, which is not the distinction the profile draws. What sets the type
+apart on the profile's own axis is that data is stored and retrieved on demand; `StoredData` and
+`PersistentData` both read alongside `BatchData` and `StreamingData`. TOSCA has no aliasing, so
+a rename after the `0.1` is a breaking change: rename now, or keep the name.
 
-## 5. `control-host` — the piece 2.3 did not finish — 15 min · *Questions 6 and 8*
+**Proposed: withdraw Section 2.5.** A relational database is `AtRestData` with `technology:
+relational` and a `product` naming the implementation, until a property specific to relational
+data — a schema — gives a derived type something to carry. Holding the section out of the `0.1`
+remains the fallback; leaving it undecided while the tag is cut is not.
+
+## 5. `control-host` — the piece 2.3 did not finish — 20 min · *Questions 6 and 8 / I46*
 
 Carried from 09-09, not reached. N9 settled the requirement name `host`. It did not settle the
 second requirement.
@@ -135,13 +172,27 @@ Two decisions, and the first is small:
   realized, since a requirement mapping cannot distribute a subset of bindings; the second can be
   built today.
 
-**Decision sought:** the name, and which of the two models the profiles adopt.
+**Also here: I46, which amends the same section — a first look.** Section 2.3 keeps three hosting
+capabilities, `PlatformHost`, `ExecutionEnvironment` and `DataPlatform`. They share a parent,
+declare nothing, and are inherited by every platform, so they neither tell platforms apart nor
+let a component ask for a platform that hosts both applications and data. The amendment collapses
+them into one capability that `Platform` exposes to every kind of guest, narrowed by derived
+platform types through `valid_source_node_types`, and `control-host` then targets that one
+capability. Proposal in the amendment to Section 2.3 of
+[`abstract-profile-proposed-changes.md`](../profiles/community/tosca/docs/abstract-profile-proposed-changes.md),
+reasoning in Problem 8, and generalized as the *One Port, Many Consumers* pattern in
+[`design-patterns.md`](../profiles/community/tosca/docs/design-patterns.md#one-port-many-consumers).
+
+**Decision sought:** the name, and which of the two models the profiles adopt. **For I46:** whether
+it goes in before the tag, since it changes the N9 edit the `0.1` makes, or after it as a breaking
+change.
 
 ## 6. The drafted resolutions nobody has ratified — 15 min · *I13 / I16(c) / I17* · **ratification sought**
 
-**Fifth time on an agenda without being read.** Three answers are already written in
-[`design-guide.md`](../profiles/community/tosca/docs/design-guide.md) and none has been ratified,
-because none has been reached. They are grouped because the work left on each is the same: read
+**Fifth time on an agenda without being read.** Three answers are already written, I16(c)'s and
+I17's in [`design-patterns.md`](../profiles/community/tosca/docs/design-patterns.md) and I13's in
+[`modeling-methodology.md`](../profiles/community/tosca/docs/modeling-methodology.md), and none
+has been ratified, because none has been reached. They are grouped because the work left on each is the same: read
 the drafted resolution and say yes or no.
 
 - **I17 — the monitoring and security patterns**, drafted 07-15. Monitoring is an observability
@@ -294,9 +345,10 @@ Five minutes is enough for either.
 ---
 
 **Decisions sought:** how a derived relationship type declares its kind (#1); the `mgmt-address`
-type (#2); the container-platform credential vocabulary (#3); `RelationalDatabase` as a derived
-type or a technology value, or an explicit deferral out of the `0.1` (#4); the `control-host` name
-and the control-node workload model (#5); and whether the §1.2.2 naming amendments are submitted to
+type (#2); the container-platform credential vocabulary (#3); withdrawing `RelationalDatabase` in
+favour of `AtRestData` with `technology` and `product`, or an explicit deferral out of the `0.1`,
+and whether to rename `AtRestData` (#4); the `control-host` name, the control-node workload model,
+and whether I46's single hosting capability goes in before the tag or after it (#5); and whether the §1.2.2 naming amendments are submitted to
 the TC or withdrawn (#10).
 
 **Ratification sought** on the three drafted resolutions in #6, or an explicit decision to retire
@@ -307,3 +359,6 @@ discussed, each becoming a decision item once the questions in it are answered.
 
 **Items 1 to 4 are on the `0.1` path, and September has three meetings left.** After those four,
 what stands between the community and its first tag is editing the profiles.
+
+**For information:** the design guide is renamed `modeling-methodology.md` (the notice before
+item 1).

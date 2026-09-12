@@ -14,7 +14,7 @@ of both. What stays here is what is still proposed or still open.
 abstract profiles, together with the problems uncovered while prototyping them
 and the decisions reached during community discussion.
 
-**Related documents:** [README](../README.md) · [prior-art](prior-art.md) · [design-guide](design-guide.md) · [meeting-history](../../../../governance/meeting-history.md) · [decision-log](../../../../governance/decision-log.md) · [open-issues](../../../../governance/open-issues.md)
+**Related documents:** [README](../README.md) · [prior-art](prior-art.md) · [modeling-methodology](modeling-methodology.md) · [meeting-history](../../../../governance/meeting-history.md) · [decision-log](../../../../governance/decision-log.md) · [open-issues](../../../../governance/open-issues.md)
 
 **How this document is organized.** Four parts, which cross-reference each other by number.
 **Section 1** says why these changes are being proposed. **Section 2** is the proposals
@@ -22,9 +22,9 @@ themselves, grouped by profile in the order the profiles build on each other, ea
 its own status. Two profiles have more than one proposal. Section 2.9 concerns `core` and
 `abstract.base` jointly and sits last rather than beside Section 2.1, so that the section numbers
 already in circulation keep their meaning. **Section 3** is the reasoning: the
-problems found while prototyping, numbered *Problem 1* through *Problem 7*, and most Section 2
+problems found while prototyping, numbered *Problem 1* through *Problem 8*, and most Section 2
 proposals point at the problem that motivates them. **Section 4** records what the community has
-settled and what is still open, numbered *question 1* through *question 9* — so a reference to
+settled and what is still open, numbered *question 1* through *question 10* — so a reference to
 "question 2" anywhere above means the second entry there.
 
 ---
@@ -179,7 +179,8 @@ returns if and when one earns its keep by carrying properties, attributes or int
 of its own — which the requirement name absorbs without change. **One further constraint came
 out of the discussion:** restrict on the capability side or the relationship side, not both.
 Declaring `valid_capability_types` and `valid_relationship_types` for the same connection
-over-constrains it and nothing binds. Reasoning in Problems 5 and 6.
+states the constraint twice, and the connection binds only while the two lists agree; once they
+drift apart, nothing binds. Reasoning in Problems 5 and 6.
 
 Deployment layering is a single concept, so it should have a single relationship type and a
 single requirement name, declared once on `Base`, with the *capability* saying what kind of
@@ -316,6 +317,78 @@ not about how many relationship types the base profile needs. It is asked and an
 Declaring `control-host` is a prerequisite for either answer, which is why it is mentioned here
 at all.
 
+**Proposed amendment: one hosting capability, permissive at the base.** *Proposed 2026-09-11;
+not yet discussed.* N9 unified the requirement name and kept the three capability types, on the
+reasoning that the capability says what kind of thing is being placed. The argument that makes
+the three relationship types redundant applies to the three capabilities as well: one
+capability type, exposed once by `Platform` and accepting every kind of guest, narrowed by a
+derived platform type where that platform accepts fewer. Reasoning in Problem 8.
+
+```yaml
+capability_types:
+  Host:                                 # placeholder name; derived, not Container itself (N10)
+    derived_from: Container
+
+relationship_types:
+  HostedOn:
+    metadata:
+      relationship_kind: containment
+    derived_from: ContainedBy
+    properties:
+      implementation-details: { type: YAML, required: false }
+    valid_capability_types: [ Host ]    # the one side constrained; Host names no relationships
+
+node_types:
+  Base:
+    requirements:
+      - host:
+          capability: Host
+          relationship: HostedOn
+
+  Platform:
+    capabilities:
+      host:
+        type: Host                      # no valid_source_node_types: every guest is accepted
+    requirements:
+      - control-host: { capability: Host,     relationship: HostedOn }
+      - links-to:     { capability: Linkable, relationship: LinksTo }
+
+  Network:
+    requirements:
+      - host: { count_range: [ 0, 1 ] }
+```
+
+Against the agreed sketch above:
+
+- **One capability instead of three.** `PlatformHost`, `ExecutionEnvironment` and `DataPlatform`
+  give way to a single type, and `Platform` exposes one capability. `PlatformHost` names one of
+  the three roles, so the single type wants a neutral name; `Host` is a placeholder in the same
+  spirit as `control-host`.
+- **No child refines `host`.** `Platform`, `Application` and `Data` inherit it from `Base`
+  unchanged, and `Network` narrows only its `count_range`. What is being placed is stated by the
+  type of the source node, which every relationship already knows, rather than by the
+  capability it targets.
+- **A platform that accepts fewer kinds of guest says so in its own type**, by refining the
+  inherited capability's `valid_source_node_types`, which a refinement may narrow but never
+  widen (§8.2.1). As an illustration only — whether
+  any community platform restricts its guests is a question for the platform profile:
+
+  ```yaml
+    ServerlessPlatform:
+      capabilities:
+        host:
+          valid_source_node_types: [ Application ]
+  ```
+
+- **The relationship-type collapse N9 left open follows.** With one capability there is nothing
+  for `RunsOn` or `AvailableOn` to accept that `HostedOn` does not.
+
+This amends N9's wording rather than its substance: the requirement name stays `host`, declared
+once on `Base`. The migration belongs to the same cut as the rest of this section. Beyond the
+consumers N9 already affects, a substituting template that maps `execution-environment` or
+`data-platform` by name maps `host` instead; the realizations that exist map all three onto the
+same capability of the node they substitute, so they lose nothing.
+
 ### 2.4 `community.tosca.abstract.platform` — properties and requirements
 
 **Status: agreed 2026-09-02, with two items reopened.** The six community platform types
@@ -334,18 +407,214 @@ considered *in addition to* the parent's, so a derived type narrows and cannot w
 | `ContainerPlatform` | `credentials` keyed `[kubeconfig]` ‡ | — |
 
 **† The `mgmt-address` type is reopened (2026-09-02).** Roberto's alternative is to type it as a
-URL, using the validated URL type now in `core`, rather than as a structured socket for one
-platform kind and a bare string for another — general, and validated in both cases. What has to
-be established first is whether every management address can be written as a URL: there is no
-official SSH URL scheme, so adopting this means publishing a convention. The reason to settle it
-before the `0.1` rather than after: a data type chosen at this level cannot be corrected at any
-lower one. Tracked as I28, and it reopens the 2026-06-24 resolution of
-[Question 1](#question-1--mgmt-address-typing).
+URL rather than as a structured socket for one platform kind and a bare string for another —
+general, and validated in both cases. What has to be established first is whether every
+management address can be written as a URL. The reason to settle it before the `0.1` rather than
+after: a data type chosen at this level cannot be corrected at any lower one. Tracked as I28, and
+it reopens the 2026-06-24 resolution of [Question 1](#question-1--mgmt-address-typing).
+
+**The validated URL type in `core` is not that type.** `HttpUrl` accepts only `http` and
+`https`, so the URL route needs a URL type that does not fix the scheme, leaving the scheme to say
+how the platform is reached.
+
+**An SSH address can be written as a URL, and doing so cites a convention rather than inventing
+one (checked 2026-09-11).** There is no RFC: the IETF draft that defined the scheme,
+`draft-ietf-secsh-scp-sftp-ssh-uri`, expired in 2006. But IANA holds a provisional registration
+of `ssh`, as `ssh://[<user>[;fingerprint=<host-key fingerprint>]@]<host>[:<port>]`, and deployed
+tools agree on its core: OpenSSH accepts `ssh://[user@]hostname[:port]` as a destination, Git
+addresses repositories as `ssh://[user@]host[:port]/path`, and Docker takes `ssh://user@host` as
+a daemon address. They differ only where a management address has no need to go — what a path
+means, which the draft says to ignore and Git and Docker each use for their own purpose; the
+draft's `;fingerprint=` parameter, which none of those tools documents; and whether a user is
+given. So the convention to adopt is the common subset, **`ssh://host[:port]`**, with port 22
+when none is given, declared in `core` as `SshUrl` (below):
+
+- **no path**, since its meaning is application-specific;
+- **no user**, since the login name is the credential's `name`, and a second source for it could
+  disagree with the first;
+- **no `;fingerprint`**, since a host-key fingerprint is trust material and belongs on a trust
+  port (I41), not in an address;
+- **a host as RFC 3986 defines one**: a DNS name, an IPv4 address or a bracketed IPv6 literal.
+
+The IANA template marks the scheme's encoding, interoperability and security as "unknown, use
+with care", the standard wording for a provisional registration, which is a reason to name the
+subset rather than cite the registration unqualified. The container-platform endpoints listed
+under ‡ below — `tcp://`, `unix://`, `https://` — are URLs of the same kind.
+
+**If the address is a URL, it is declared once, on `Platform`.** It is declared per platform type
+today only because the types differ, a socket on one and a string on another, and a URL type that
+does not fix the scheme covers every case. It then belongs where `credentials` already is: the two
+answer one question, how the orchestrator reaches the platform. `Base` is the wrong level.
+`Application`, `Data` and `Network` are deployed onto platforms and managed through them, and an
+application's endpoint is a contract for its consumers (Section 2.6), not a management address.
+
+**Each platform type then narrows the address, as it narrows its credentials:**
+
+| Property | Declared once on `Platform` as | Narrowed per platform type by | A realization dispatches on |
+|----------|--------------------------------|-------------------------------|-----------------------------|
+| `credentials` | a map of `CredentialRef` | a `key_schema` refinement, to the kinds it accepts | the key |
+| `mgmt-address` | a `Url` | refining the type to a scheme's own type where one scheme is admitted; a validation over the schemes where several are | the scheme |
+
+**Two mechanisms, because they do two jobs.** What a URL of a given scheme looks like is a fact
+about the scheme, so it belongs in a type declared once, as `HttpUrl` already does for `http` and
+`https` and `SshUrl` below does for `ssh`. Which schemes a property admits is a fact about the
+property, and it has to stay a validation wherever there is more than one: TOSCA has no union
+types (I24), so no single type can say "one of these three".
+
+| Platform type | `mgmt-address` narrowed by |
+|---------------|----------------------------|
+| `ServerPlatform` | refining the type to `SshUrl` |
+| `VirtualizationPlatform` | refining the type to `HttpUrl` |
+| `ContainerPlatform` | a validation admitting `https`, `tcp` and `unix`, the type staying `Url` |
+
+A refined type must derive from the parent's, and a refinement's validation applies in addition to
+the parent's (§9.4), so either way a derived type narrows the address and cannot widen it, which is
+the rule that bounds the credential vocabulary too. Only schemes whose syntax the community fixes
+get a type of their own. Any other scheme is `Url` narrowed on the property, so that, as with a new
+credential kind, a new scheme needs no change to `core`.
+
+**Two consequences follow.** Declaring it on `Platform` commits every platform to the URL family,
+since a derived type can narrow the property but cannot take it outside `Url`. Enumerating the
+remaining cases, `PaasPlatform`, `SaasPlatform` and `ServerlessPlatform` among them, is therefore
+the precondition for the move, and part of settling I28 before the `0.1`. And it supplies the
+address the ‡ resolution below gives `ContainerPlatform`, which then inherits one rather than
+declaring its own.
+
+**The cost of the URL route is that a URL has to be parsed to be read in parts.** A structured
+socket yields its host by path, as `[mgmt-address, ip-address]`. A URL yields a host and a port
+only by parsing, and the built-in functions do not parse one: `$token` returns the substring at a
+fixed index between separator characters, so it cannot read a port that may be absent, or a
+bracketed IPv6 host whose colons are themselves separators. A realization would otherwise have to
+hand the whole URL to an artifact that parses it. That is the main argument against the URL
+route, and `core` can answer it.
+
+**What `core` would add if the route is taken.**
+
+- **A `Url` type that validates RFC 3986's generic syntax**, `scheme ":" hier-part [ "?" query ]
+  [ "#" fragment ]`, rather than any one scheme's rules, so that `unix:///var/run/docker.sock`
+  validates as readily as `ssh://host:22`. Which schemes a property admits is its refinement's
+  business, as the table above sets out. `core` is the home for the reason it is `CredentialRef`'s:
+  typing is nominal, so the abstract property and every profile that assigns or reads it must name
+  one declaration. `HttpUrl` then derives from `Url`, keeping its stricter pattern as the
+  refinement's added validation, so that an `HttpUrl` value is a `Url` and anything typed `Url`
+  accepts one. That change breaks nothing: `HttpUrl`'s values and validation are unchanged, and its
+  parent moves from `string` to a type that is itself a string. As I26 asks of `core`'s other
+  patterns, `Url` should carry test cases, since a generic URL pattern is harder to get right than
+  `HttpUrl`'s.
+- **An `SshUrl` type derived from `Url`**, holding the subset adopted above: the `ssh` scheme, a
+  host and an optional port, and nothing else. The convention is then stated once rather than
+  repeated on every property that admits `ssh`, and a realization that receives one can rely on
+  there being no path and no user in what it parses. It carries test cases for the same reason
+  `Url` does.
+- **A function that reads a URL's parts. This one is required.** An address supplied to the
+  abstract node travels *down* to technology types that want its host and its port apart, and no
+  built-in function can take them out reliably. It returns one part at a time — scheme, host, port
+  or path — rather than a decoded structure, because a function's result cannot be followed by a
+  path, so a structure would be unusable where a realization needs the host. For a part the URL
+  does not carry, it returns a default the caller passes, such as 22 for an `ssh` port. The default
+  has to be an argument: TOSCA has no built-in function that substitutes one for an absent value,
+  and RFC 3986 recommends leaving out a port that equals the scheme's default, so a well-formed
+  `ssh://host` often carries no port at all.
+- **A function that composes one.** An address a realization produces travels *up* — a
+  provisioned server's IP address and port becoming its platform's `mgmt-address` — and has to be
+  assembled. `$concat` covers a DNS name or an IPv4 address, but produces an invalid URL from an
+  IPv6 host, which must be bracketed, and cannot leave out a port that is absent. A composing
+  function that brackets the host, omits an absent port and validates its result keeps what a
+  realization produces as valid as what an author assigns.
+
+The two functions follow the two directions a credential also travels, supplied downward and
+produced upward, which is why they come as a pair. Like `core`'s other functions they would be
+implemented in Python, which I43 notes is the only implementation a profile can carry for a
+function today.
+
+**How a realization translates across the boundary.** Property mapping requires the two sides'
+types to match (§15.2), so the translation is not in the mapping. It sits in the substituting
+template's own inputs and outputs, between a boundary-typed value and the technology types below,
+in the form the [modeling methodology](modeling-methodology.md#passing-implementation-details-across-a-substitution-boundary)
+uses for `implementation-details`: a mapped input of the abstract type, and a second input whose
+`value` a `core` function derives from it, there `$decode_yaml`. In the sketches below,
+`$url_part` and `$compose_url` stand for the two functions above; naming them is the group's
+call.
+
+Downward, for a realization onto a server whose technology types take a socket:
+
+```yaml
+inputs:
+  mgmt-address:              # boundary-typed: exactly the abstract node's type
+    type: SshUrl
+  mgmt-socket:               # derived: what the technology types below expect
+    type: IPv4Socket
+    value:
+      ip-address: { $url_part: [ { $get_input: mgmt-address }, host ] }
+      transport-port: { $url_part: [ { $get_input: mgmt-address }, port, 22 ] }
+```
+
+Upward, for a realization that provisions the server and reports its address:
+
+```yaml
+substitution_mappings:
+  attributes:
+    mgmt-address: mgmt_url
+outputs:
+  mgmt_url:
+    type: SshUrl
+    value: { $compose_url: [ ssh, { $get_attribute: [ server, address ] } ] }
+```
+
+**The downward translation can lose information; the upward one cannot.** A URL's host may be a
+DNS name or a bracketed IPv6 literal, and `IPv4Socket` types its host as `IPv4`, which holds
+neither. A realization whose technology types need an IPv4 literal says so in its substitution
+filter, which is one more place the reading function is used. A socket always composes into a URL.
+
+**The cost is paid once per realization.** Nothing below the boundary changes: the translation is
+written in each realization's inputs and outputs, not in the node templates or artifacts it
+deploys.
 
 **‡ `[kubeconfig]` is too restrictive** and was agreed on 2026-09-02 to be an oversight rather
 than a position. A container platform can equally be Docker with Compose, Docker Swarm or Nomad,
-none of which authenticate with a kubeconfig. The vocabulary needs extending as those platforms
-are modelled; tracked as I29.
+none of which authenticate with a kubeconfig. Tracked as I29.
+
+**Proposed resolution (2026-09-11).** The kinds follow from what a connection opens: a platform
+records how the orchestrator reaches it on the node that connection opens, as the
+[credential orchestration proposal](credential-orchestration-proposal.md) puts it. That gives
+`ContainerPlatform` four kinds:
+
+| Kind | What the connection opens | Used by |
+|------|---------------------------|---------|
+| `kubeconfig` | the cluster API; the file carries its endpoint and its CA | every Kubernetes distribution |
+| `token` | the platform's HTTP API | Nomad's ACL token; a Kubernetes bearer token held without a kubeconfig |
+| `x509_cert`, `x509_key` | the platform's API, over mutual TLS | a remote Docker daemon — and so Compose and a Swarm manager, which speak its API — and Nomad with mutual TLS enabled |
+
+Three kinds are absent on purpose. **`ssh_key` and `ssh_password` open the host.** A Docker
+`ssh://` endpoint, a remote Podman and a runtime reached through its local socket are all reached
+by logging into the machine the platform runs on, so that login belongs on the `ServerPlatform`
+hosting the platform; declaring it here as well would give one login two homes. **`cloud_account`
+opens a cloud account**, which is the `VirtualizationPlatform`'s; a managed cluster's kubeconfig
+uses it from there. **`password`**: nothing in this class authenticates its orchestrator with HTTP
+Basic.
+
+**The vocabulary is a ceiling, so it is a union.** A refinement narrows and cannot widen (§9.4),
+so what the abstract type admits bounds every realization of it, and each realization reads the
+kind it consumes.
+
+**Two things the vocabulary cannot supply on its own.**
+
+- **An address.** A token or a client certificate is presented *to* an endpoint, and
+  `ContainerPlatform` declares none; a kubeconfig needs none only because it carries its server's
+  URL. The extension therefore needs an optional `mgmt-address`: inherited from `Platform` if I28
+  declares it there as a URL, and declared on `ContainerPlatform` otherwise. The
+  endpoints in question — `tcp://host:2376`, `unix:///var/run/docker.sock`, `https://host:4646`,
+  `https://host:6443` — carry a scheme, and one is a socket path rather than a host and port.
+- **Trust.** The x509 kinds, like a token sent over TLS, verify the server against a CA. That is
+  trust material rather than credential material and belongs on a trust port of its own, not in
+  this map (I41).
+
+**Sequencing.** Widening a `key_schema` is not a breaking change: every value that validated
+still validates, and every narrower refinement downstream still lies within the wider set; it is
+narrowing that breaks. So `0.1` can ship `[kubeconfig]` as the table shows, and the three further
+kinds arrive in `0.2` together with `mgmt-address` and the trust requirement — which also keeps a
+template from supplying a kind that no realization can yet use. The mechanisms in the table are to
+be confirmed against each platform's documentation before they are written into the profile.
 
 `PaasPlatform`, `SaasPlatform` and `ServerlessPlatform` are not addressed. Nothing has been
 prototyped against them, so there is no evidence yet for what they would need.
@@ -353,8 +622,8 @@ prototyped against them, so there is no evidence yet for what they would need.
 ### 2.5 `community.tosca.abstract.data` — `RelationalDatabase`
 
 **Status: open, and the derivation itself is in question (2026-09-02).** `Base` already carries
-`technology` and `vendor`, so the same thing is expressible as `AtRestData` with
-`technology: relational` and `vendor: postgres`, and Roberto asks whether the relational/NoSQL
+`technology` and `product`, so the same thing is expressible as `AtRestData` with
+`technology: relational` and `product: postgresql`, and Roberto asks whether the relational/NoSQL
 distinction belongs at this level or is a technology detail. The counter-precedent is
 `ContainerPlatform` against `VirtualizationPlatform`, which sit at this level for a distinction
 of the same kind, and Roberto's own tiebreaker is that a derived type earns its place if it has
@@ -420,7 +689,7 @@ capability_types:
 
 `Service` names the functionality exposed, in the same construction as `DataSource` — the
 ability to make data available. `Interaction` would name the relationship rather than the
-functionality, against the naming principle in the design guide, and `Interface` collides with
+functionality, against the Component/Port naming principle, and `Interface` collides with
 TOSCA's own `interface_types`.
 
 **Declared on `Application`, at both ends.** Interaction is symmetric between applications, so
@@ -444,8 +713,8 @@ node_types:
           capability: ExecutionEnvironment
 ```
 
-The two names follow the split the design guide draws: the **capability** names the functionality
-exposed, so `service`; the **requirement** names the intent of the source toward the target, so
+The two names follow the split the Component/Port pattern draws: the **capability** names the
+functionality exposed, so `service`; the **requirement** names the intent of the source toward the target, so
 `interacts-with`, reading like `links-to` and `processes` beside it. The existing `endpoint`
 requirement is the profile's one requirement named for a thing rather than a relation.
 
@@ -878,8 +1147,8 @@ reasoning would want a type for two hosts, and another for many.
 
 **`processes` sits below the System View.** The `Process` data type is a `command` plus
 `parameters`. A command string names an executable, which the
-[design guide](design-guide.md) places in the Device View row — vendor-specific realization,
-alongside k3s and Docker Engine. Requiring one on a System View type inverts the model
+[modeling methodology](modeling-methodology.md) places in the Device View row —
+vendor-specific realization, alongside k3s and Docker Engine. Requiring one on a System View type inverts the model
 continuum the profiles are organized on.
 
 It is also `required: true`, which makes a whole category unmodellable: software installed
@@ -972,8 +1241,8 @@ The profile labels all three `relationship_kind: containment` itself. They carry
 properties, no interfaces and no behaviour — only a different `valid_capability_types`, which
 duplicates what a requirement's `capability` keyname already states.
 
-- **The design guide argues against the split.** Its naming principle holds that *capability*
-  type names describe the functionality a component exposes, while *relationship* type names
+- **The Component/Port pattern argues against the split.** Its naming principle holds that
+  *capability* type names describe the functionality a component exposes, while *relationship* type names
   describe the intent of the source toward the target. Placing a platform, an application or
   data onto a platform is one intent against three exposed functionalities. The difference
   belongs on the capability, and it is already there.
@@ -1039,8 +1308,8 @@ in the profile is a sink.
   `port`, `target-port`, `protocol` and `name`. That is right for a network endpoint
   and the name is honest about it — but hoisting it onto `Application` would oblige every
   application to expose a port and a protocol. An O-PAS signal port carries `Tags`; there is no
-  port and no protocol to give. The design guide already prescribes the resolution: *a contract
-  every realization exposes belongs on the base capability; a value specific to one realization
+  port and no protocol to give. The Component/Port pattern already prescribes the resolution:
+  *a contract every realization exposes belongs on the base capability; a value specific to one realization
   belongs on a capability derived from that base.* `Endpoint` is a specialization that was never
   given its base.
 
@@ -1110,6 +1379,70 @@ redundancy, which the community `runs-on` already permits, its `count_range` bei
 default.
 
 **Not yet discussed by the community.**
+
+---
+
+### Problem 8 — Three hosting capabilities that every platform exposes
+
+`Platform` declares three capabilities — `host` of type `PlatformHost`, `execution-environment`
+of type `ExecutionEnvironment` and `data-platform` of type `DataPlatform` — and every platform
+type inherits all three. N9 kept them when it unified the requirement name, but they share the
+property Problem 6 found in the relationship types:
+
+| | parent | properties | attributes | exposed by |
+|---|---|---|---|---|
+| `PlatformHost` | `Container` | none | none | every `Platform` |
+| `ExecutionEnvironment` | `Container` | none | none | every `Platform` |
+| `DataPlatform` | `Container` | none | none | every `Platform` |
+
+- **They are one capability under three names.** Same parent, nothing declared. The
+  realizations that exist confirm it from the other side: a substituting template maps all
+  three onto the same capability of the node it substitutes.
+
+- **They do not tell platforms apart.** A derived type cannot remove an inherited capability,
+  so every platform advertises all three kinds of hosting — a serverless platform claims to
+  hold data and to host other platforms. What remains for restricting one is to narrow its
+  `valid_source_node_types`, which does with three capabilities what one does alone.
+
+- **A requirement cannot ask for more than one of them.** A requirement names a single
+  capability, so a component has no way to ask for a platform that hosts both applications and
+  data. Since every platform exposes all three, the answer would be yes regardless — the split
+  carries no information a placement could use. With one capability, what a platform accepts is
+  stated in one place, and every guest bound to it is checked against that one list: an
+  application and its data placed on the same platform each pass or fail against the same
+  `valid_source_node_types`.
+
+- **The vocabulary does not fit the guests it has.** Four kinds of node are placed — platforms,
+  applications, data and networks — against three capabilities, so `Network` borrows
+  `PlatformHost`, which reads as hosting a platform. Another kind of guest would need another
+  capability on `Platform`. One capability that says only *can host* fits every guest.
+
+- **Permission belongs at the base, restriction below it.** Refinement narrows (§5.1.3): a
+  derived type may tighten a property's validation (§9.4), a requirement's `count_range`
+  (§8.4.1) or a capability's `valid_source_node_types` (§8.1, §8.2.1), but not loosen what its
+  parent allowed. So a restriction declared at the base binds every type beneath it, while a
+  permission granted at the base can be withdrawn by any one of them. The flexible arrangement
+  is a base as permissive as the model needs and each derived type as restrictive as its
+  technology demands. Three capabilities on the base grant all three kinds of hosting to every
+  platform, and a derived type can withdraw one only by narrowing its sources.
+
+  §8.2.1's wording, read literally, measures a capability refinement against the capability
+  type rather than the parent node type's definition, which would let a derived node type widen
+  a list its parent narrowed. That contradicts §5.1.3, §8.1 and the parallel §8.4.1, and is
+  raised as errata in
+  [oasis-tcs/tosca-specs#371](https://github.com/oasis-tcs/tosca-specs/issues/371); this
+  proposal relies on the narrowing reading.
+
+- **O-PAS already works this way.** Its control application components are placed through one
+  requirement onto one capability of a distributed control node, and the node types derived
+  from it — compute-only, I/O-only — narrow that capability's `valid_source_node_types` to the
+  components each accepts.
+
+- **Nothing is lost.** If a hosting role ever needs properties of its own, a capability type
+  derived from the single one carries them. A requirement is satisfied by a capability of the
+  type it names or of any type derived from it, so guests asking for the parent keep binding.
+
+Proposal in the amendment to Section 2.3. **Not yet discussed by the community.**
 
 ---
 
@@ -1240,3 +1573,12 @@ declared on `Application` and derived from `Partner`, with `Endpoint` rederived 
 should `InteractsWith` rederive from `AssociatesWith` rather than `DependsOn`, and should the
 same-type constraint go? Proposal in Section 2.6, reasoning in Problem 7 — which also asks
 whether `Processes` should distinguish reading a dataset from writing one.
+
+### Question 10 — One hosting capability
+
+*Open (raised 2026-09-11).* Should `PlatformHost`, `ExecutionEnvironment` and `DataPlatform`
+collapse into one hosting capability type, exposed once by `Platform` with no restriction on
+its sources and narrowed by the derived platform types that accept fewer kinds of guest? Doing
+so amends N9's wording, which leaves the capability to say what kind of thing is placed, and
+settles the relationship-type collapse N9 left open. The single type also needs a name.
+Proposal in the amendment to Section 2.3, reasoning in Problem 8.

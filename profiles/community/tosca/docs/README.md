@@ -6,7 +6,10 @@ The documents here fall into four kinds, and a document's kind says how long it
 lives and what it may claim.
 
 - **Guides** describe what *is*: the methodology, the organization, the
-  conventions. They carry no status line because they are always current.
+  conventions. Their status is always *current practice*. A guide may also carry
+  a proposed amendment to itself, marked by a callout that names its tracker
+  issue; when the issue is decided the callout goes, and the text either stays as
+  current practice or goes with it.
 - **Reference** collects material gathered from elsewhere. It is input, not
   guidance, and it goes stale rather than wrong.
 - **Domain notes** record why a particular technology is modeled the way it is.
@@ -19,14 +22,13 @@ lives and what it may claim.
 
 ## Guides
 
-- **[design-guide.md](design-guide.md)** — the modeling methodology and the
-  design patterns: the Model Continuum and its levels of abstraction, how to
-  translate between levels, which operations a node type declares at each level,
-  and how abstract services are deployed.
+- **[modeling-methodology.md](modeling-methodology.md)** — the Model Continuum
+  and its levels of abstraction, how to translate between levels, which
+  operations a node type declares at each level, and how abstract services are
+  deployed.
 - **[design-patterns.md](design-patterns.md)** — the recurring modeling
   patterns the profiles are built from. Each names a problem that comes up
-  across profiles and the type definitions that answer it. Currently the
-  Component/Port pattern and the practices built on it.
+  across profiles and the type definitions that answer it.
 - **[artifact-conventions.md](artifact-conventions.md)** — how values reach an
   implementation artifact and how results come back: the operation convention,
   the function convention, and what a runtime may be assumed to provide.
