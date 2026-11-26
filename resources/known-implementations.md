@@ -181,7 +181,6 @@ from a single model, across cloud, data center, edge and the plant
 floor, including O-PAS Part 9 process automation systems. Built on
 [tosca-core](https://github.com/ubicity-corp/tosca-core).
 
-* [TOSCA Type Profile Browser](https://ubicity.com/profiles.html)
 * [TOSCA Validator](https://ubicity.com/validator.html) (online)
 
 ## [Unfurl](https://unfurl.run/)
